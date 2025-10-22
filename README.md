@@ -2,6 +2,16 @@
 
 A TypeScript CLI tool to safely copy contact flows and flow modules between Amazon Connect instances (e.g., dev → prod). Supports copying between instances in the same or different AWS accounts and regions.
 
+## Terminology
+
+Throughout this tool and codebase, we use specific terminology to distinguish between different types of Amazon Connect objects:
+
+- **Flows** - Contact flows and flow modules (the things being copied)
+- **Resources** - Supporting resources like queues, prompts, routing profiles, hours of operation, quick connects, security profiles, user hierarchies, and agent statuses (used for validation)
+- **Instance Inventory** - Complete inventory of an Amazon Connect instance, combining both flows and resources
+
+Note: When we say "resources" in this project, we specifically mean the supporting resources listed above, NOT flows or modules.
+
 ## Features
 
 - **Safe by Design**: Read-only access to source, writes to target only after explicit confirmation
