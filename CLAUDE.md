@@ -152,12 +152,20 @@ JAVASCRIPT/TYPESCRIPT PREFERENCES:
 - Choose quote style based on fewest escapes needed. When escapes are equal, prefer double quotes, then single quotes, then backticks
 - Keep console output inspectable - pass objects directly rather than interpolating them into strings
 - Avoid importing non-standard packages unless absolutely needed or explicitly requested
-- Separate type imports from runtime imports using `import type`, with a blank line between them:
+- Separate type imports from runtime imports using `import type`, with a blank line between them when both are multiline:
   ```typescript
   import { SomeCommand, AnotherCommand } from "@aws-sdk/client-connect";
 
   import type { SomeType, AnotherType } from "@aws-sdk/client-connect";
   ```
+  Single-line imports from same source don't need blank line separation.
+- Keep function signatures on a single line even if long (name, parameters, return type all together)
+- Single-line conditionals for simple control flow - when condition is short and action is a single keyword (return, continue, break), write on one line without braces:
+  ```typescript
+  if (!name || !sourceArn) continue;
+  ```
+- Use liberal vertical whitespace - add blank lines before naked keywords or short statements so they stand out, especially control flow keywords after multi-line blocks
+- Avoid excessive destructuring in loops or function parameters when reading from a variable is clearer - prefer `resourcePair.source` over destructuring `{ source }` if properties are used multiple times
 
 CODE MODIFICATIONS - CRITICAL:
 - NEVER modify existing code unless EXPLICITLY and CLEARLY instructed
