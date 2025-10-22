@@ -152,6 +152,12 @@ JAVASCRIPT/TYPESCRIPT PREFERENCES:
 - Choose quote style based on fewest escapes needed. When escapes are equal, prefer double quotes, then single quotes, then backticks
 - Keep console output inspectable - pass objects directly rather than interpolating them into strings
 - Avoid importing non-standard packages unless absolutely needed or explicitly requested
+- Separate type imports from runtime imports using `import type`, with a blank line between them:
+  ```typescript
+  import { SomeCommand, AnotherCommand } from "@aws-sdk/client-connect";
+
+  import type { SomeType, AnotherType } from "@aws-sdk/client-connect";
+  ```
 
 CODE MODIFICATIONS - CRITICAL:
 - NEVER modify existing code unless EXPLICITLY and CLEARLY instructed

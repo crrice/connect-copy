@@ -1,6 +1,6 @@
 
 
-import { ContactFlow, ContactFlowModule } from "@aws-sdk/client-connect";
+import type { ContactFlow, ContactFlowModule } from "@aws-sdk/client-connect";
 import { getArnFieldsForActionType } from "./arn-field-mapping.js";
 
 

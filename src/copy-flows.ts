@@ -1,10 +1,10 @@
 
 import { readFile } from "fs/promises";
+import type { ContactFlowSummary, ContactFlowModuleSummary } from "@aws-sdk/client-connect";
 import { createConnectClient } from "./connect/client.js";
 import { listContactFlows, listContactFlowModules, describeContactFlowModule } from "./connect/flows.js";
 import { matchesFlowFilters } from "./filters.js";
 import { extractDependencyArnsFromFlow } from "./arn-utils.js";
-import { ContactFlowSummary, ContactFlowModuleSummary } from "@aws-sdk/client-connect";
 
 export interface CopyFlowsOptions {
   sourceConfig: string;

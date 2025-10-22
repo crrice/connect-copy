@@ -1,13 +1,16 @@
 
 import {
-  ConnectClient,
   ListContactFlowsCommand,
-  ContactFlowSummary,
   ListContactFlowModulesCommand,
-  ContactFlowModuleSummary,
   DescribeContactFlowCommand,
+  DescribeContactFlowModuleCommand
+} from "@aws-sdk/client-connect";
+
+import type {
+  ConnectClient,
+  ContactFlowSummary,
+  ContactFlowModuleSummary,
   ContactFlow,
-  DescribeContactFlowModuleCommand,
   ContactFlowModule
 } from "@aws-sdk/client-connect";
 
