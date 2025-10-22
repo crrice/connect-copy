@@ -1,0 +1,32 @@
+{
+  "Version": "2019-10-30",
+  "StartAction": "disconnect-action",
+  "Metadata": {
+    "entryPointPosition": {
+      "x": 20,
+      "y": 20
+    },
+    "snapToGrid": false,
+    "name": "Default inbound",
+    "description": "Default inbound contact flow",
+    "type": "contactFlow",
+    "status": "published",
+    "hash": "00000000000000000000000000000000",
+    "ActionMetadata": {
+      "disconnect-action": {
+        "position": {
+          "x": 200,
+          "y": 20
+        }
+      }
+    }
+  },
+  "Actions": [
+    {
+      "Identifier": "disconnect-action",
+      "Type": "DisconnectParticipant",
+      "Parameters": {},
+      "Transitions": {}
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "Version": "2019-10-30",
+  "StartAction": "098007b7-e257-4b7c-9c3c-741d4680517d",
+  "Metadata": {
+    "entryPointPosition": {
+      "x": 243,
+      "y": 172
+    },
+    "snapToGrid": false,
+    "ActionMetadata": {
+      "098007b7-e257-4b7c-9c3c-741d4680517d": {
+        "position": {
+          "x": 433,
+          "y": 236
+        },
+        "audio": [
+          {
+            "type": "Text",
+            "tts": "Thank you for calling. Your call is very important to us and will be answered in the order it was received.",
+            "$$hashKey": "02A"
+          },
+          {
+            "type": "Prompt",
+            "prompt": {
+              "id": "arn:aws:connect:us-east-1:847118279496:instance/4b5d91f9-c7f7-4e83-90c2-e4591769d7c6/prompt/355d7bb4-68a7-44af-b348-60b2035095d3",
+              "text": "Music_Pop_ThisAndThatIsLife_Inst.wav"
+            },
+            "$$hashKey": "02B"
+          }
+        ],
+        "timeoutUnit": {
+          "display": "Minutes",
+          "value": "min"
+        }
+      }
+    }
+  },
+  "Actions": [
+    {
+      "Identifier": "098007b7-e257-4b7c-9c3c-741d4680517d",
+      "Parameters": {
+        "Messages": [
+          {
+            "Text": "Thank you for calling. Your call is very important to us and will be answered in the order it was received."
+          },
+          {
+            "PromptId": "arn:aws:connect:us-east-1:847118279496:instance/4b5d91f9-c7f7-4e83-90c2-e4591769d7c6/prompt/355d7bb4-68a7-44af-b348-60b2035095d3"
+          }
+        ]
+      },
+      "Transitions": {
+        "Errors": [],
+        "Conditions": []
+      },
+      "Type": "MessageParticipantIteratively"
+    }
+  ]
+}

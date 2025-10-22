@@ -1,0 +1,12 @@
+{
+  "ContactFlow": {
+    "Arn": "arn:aws:connect:us-east-1:847118279496:instance/4b5d91f9-c7f7-4e83-90c2-e4591769d7c6/contact-flow/345920dc-4e23-4205-9303-514df7cc71d4",
+    "Id": "345920dc-4e23-4205-9303-514df7cc71d4",
+    "Name": "Default agent transfer",
+    "Type": "AGENT_TRANSFER",
+    "State": "ACTIVE",
+    "Status": "PUBLISHED",
+    "Description": "Default flow to transfer to an agent.",
+    "Tags": {}
+  }
+}

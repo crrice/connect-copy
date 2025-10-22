@@ -1,0 +1,12 @@
+{
+  "ContactFlow": {
+    "Arn": "arn:aws:connect:us-east-1:847118279496:instance/4b5d91f9-c7f7-4e83-90c2-e4591769d7c6/contact-flow/c74d9036-38b9-4a1d-b8a7-8ca817c16a35",
+    "Id": "c74d9036-38b9-4a1d-b8a7-8ca817c16a35",
+    "Name": "Default customer queue",
+    "Type": "CUSTOMER_QUEUE",
+    "State": "ACTIVE",
+    "Status": "PUBLISHED",
+    "Description": "Default audio played when a customer is waiting in queue.",
+    "Tags": {}
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "ContactFlow": {
+    "Arn": "arn:aws:connect:us-east-1:000000000000:instance/00000000-0000-0000-0000-000000000000/contact-flow/00000000-0000-0000-0000-000000000001",
+    "Id": "00000000-0000-0000-0000-000000000001",
+    "Name": "Default inbound",
+    "Type": "CONTACT_FLOW",
+    "State": "ACTIVE",
+    "Status": "PUBLISHED",
+    "Description": "Default inbound contact flow",
+    "Tags": {}
+  }
+}

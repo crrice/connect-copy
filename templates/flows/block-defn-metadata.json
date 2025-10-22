@@ -1,0 +1,12 @@
+{
+  "ContactFlow": {
+    "Arn": "arn:aws:connect:us-east-1:847118279496:instance/4b5d91f9-c7f7-4e83-90c2-e4591769d7c6/contact-flow/c6826c0e-485c-4e08-bc2d-f948267f29e9",
+    "Id": "c6826c0e-485c-4e08-bc2d-f948267f29e9",
+    "Name": "Block Defn",
+    "Type": "CONTACT_FLOW",
+    "State": "ACTIVE",
+    "Status": "SAVED",
+    "Description": "",
+    "Tags": {}
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "Version": "2019-10-30",
+  "StartAction": "1a34ecf3-77ff-46a7-b210-38a1a980127b",
+  "Metadata": {
+    "entryPointPosition": {
+      "x": 75,
+      "y": 20
+    },
+    "snapToGrid": false,
+    "ActionMetadata": {
+      "1a34ecf3-77ff-46a7-b210-38a1a980127b": {
+        "position": {
+          "x": 258,
+          "y": 66
+        },
+        "audio": [
+          {
+            "type": "Text",
+            "tts": "<speak>You are on hold <break time=\"10s\"/></speak>",
+            "$$hashKey": "01J",
+            "ttsType": "ssml"
+          }
+        ],
+        "timeoutUnit": {
+          "display": "Minutes",
+          "value": "min"
+        }
+      }
+    }
+  },
+  "Actions": [
+    {
+      "Identifier": "1a34ecf3-77ff-46a7-b210-38a1a980127b",
+      "Parameters": {
+        "Messages": [
+          {
+            "SSML": "<speak>You are on hold <break time=\"10s\"/></speak>"
+          }
+        ]
+      },
+      "Transitions": {
+        "Errors": [],
+        "Conditions": []
+      },
+      "Type": "MessageParticipantIteratively"
+    }
+  ]
+}

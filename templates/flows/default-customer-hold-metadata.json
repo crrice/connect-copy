@@ -1,0 +1,12 @@
+{
+  "ContactFlow": {
+    "Arn": "arn:aws:connect:us-east-1:847118279496:instance/4b5d91f9-c7f7-4e83-90c2-e4591769d7c6/contact-flow/0dc8a4e8-682e-46a6-98e1-e4347e01452e",
+    "Id": "0dc8a4e8-682e-46a6-98e1-e4347e01452e",
+    "Name": "Default customer hold",
+    "Type": "CUSTOMER_HOLD",
+    "State": "ACTIVE",
+    "Status": "PUBLISHED",
+    "Description": "Default audio the customer hears while on hold.",
+    "Tags": {}
+  }
+}

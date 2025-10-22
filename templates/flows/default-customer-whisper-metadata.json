@@ -1,0 +1,12 @@
+{
+  "ContactFlow": {
+    "Arn": "arn:aws:connect:us-east-1:847118279496:instance/4b5d91f9-c7f7-4e83-90c2-e4591769d7c6/contact-flow/57d40bf9-c04a-461d-a8e9-85fa18f15a2c",
+    "Id": "57d40bf9-c04a-461d-a8e9-85fa18f15a2c",
+    "Name": "Default customer whisper",
+    "Type": "CUSTOMER_WHISPER",
+    "State": "ACTIVE",
+    "Status": "PUBLISHED",
+    "Description": "Default whisper played to the customer",
+    "Tags": {}
+  }
+}

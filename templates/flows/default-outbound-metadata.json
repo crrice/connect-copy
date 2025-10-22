@@ -1,0 +1,12 @@
+{
+  "ContactFlow": {
+    "Arn": "arn:aws:connect:us-east-1:847118279496:instance/4b5d91f9-c7f7-4e83-90c2-e4591769d7c6/contact-flow/5e35003a-61f1-4c90-bda7-1936034f7994",
+    "Id": "5e35003a-61f1-4c90-bda7-1936034f7994",
+    "Name": "Default outbound",
+    "Type": "OUTBOUND_WHISPER",
+    "State": "ACTIVE",
+    "Status": "PUBLISHED",
+    "Description": "Default flow for outbound calls.",
+    "Tags": {}
+  }
+}

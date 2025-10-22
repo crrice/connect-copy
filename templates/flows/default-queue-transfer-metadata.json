@@ -1,0 +1,12 @@
+{
+  "ContactFlow": {
+    "Arn": "arn:aws:connect:us-east-1:847118279496:instance/4b5d91f9-c7f7-4e83-90c2-e4591769d7c6/contact-flow/c6ca8e63-b1b1-41a7-b0c8-97ac14cc39d9",
+    "Id": "c6ca8e63-b1b1-41a7-b0c8-97ac14cc39d9",
+    "Name": "Default queue transfer",
+    "Type": "QUEUE_TRANSFER",
+    "State": "ACTIVE",
+    "Status": "PUBLISHED",
+    "Description": "Default flow used to transfer to a queue.",
+    "Tags": {}
+  }
+}

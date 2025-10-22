@@ -1,0 +1,12 @@
+{
+  "ContactFlow": {
+    "Arn": "arn:aws:connect:us-east-1:847118279496:instance/4b5d91f9-c7f7-4e83-90c2-e4591769d7c6/contact-flow/4ea2e7ab-b416-4976-8bd8-a40207430af3",
+    "Id": "4ea2e7ab-b416-4976-8bd8-a40207430af3",
+    "Name": "Default agent whisper",
+    "Type": "AGENT_WHISPER",
+    "State": "ACTIVE",
+    "Status": "PUBLISHED",
+    "Description": "Default whisper played to the agent.",
+    "Tags": {}
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "ContactFlow": {
+    "Arn": "arn:aws:connect:us-east-1:847118279496:instance/4b5d91f9-c7f7-4e83-90c2-e4591769d7c6/contact-flow/8b6c827d-c825-4bbe-ba79-69612a55df7a",
+    "Id": "8b6c827d-c825-4bbe-ba79-69612a55df7a",
+    "Name": "Default agent hold",
+    "Type": "AGENT_HOLD",
+    "State": "ACTIVE",
+    "Status": "PUBLISHED",
+    "Description": "Audio played for the agent when on hold",
+    "Tags": {}
+  }
+}
