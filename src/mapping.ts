@@ -27,6 +27,24 @@ export interface MissingResource {
 
 
 export interface ResourceInventory {
+  queues: QueueSummary[];
+  prompts: PromptSummary[];
+  routingProfiles: RoutingProfileSummary[];
+  hoursOfOperations: HoursOfOperationSummary[];
+  quickConnects: QuickConnectSummary[];
+  securityProfiles: SecurityProfileSummary[];
+  hierarchyGroups: HierarchyGroupSummary[];
+  agentStatuses: AgentStatusSummary[];
+}
+
+
+export interface FlowInventory {
+  flows: ContactFlowSummary[];
+  modules: ContactFlowModuleSummary[];
+}
+
+
+export interface InstanceInventory {
   flows: ContactFlowSummary[];
   modules: ContactFlowModuleSummary[];
   queues: QueueSummary[];
@@ -81,7 +99,16 @@ function buildResourceMap<T extends { Name?: string | undefined; Arn?: string | 
 }
 
 
-export function buildAllResourceMappings(source: ResourceInventory, target: ResourceInventory): ResourceMappings {
+export function buildInstanceInventory(flows: FlowInventory, resources: ResourceInventory): InstanceInventory {
+  return {
+    ...resources,
+    flows: flows.flows,
+    modules: flows.modules
+  };
+}
+
+
+export function buildAllResourceMappings(source: InstanceInventory, target: InstanceInventory): ResourceMappings {
   const arnMap = new Map<string, string>();
   const missingResources: MissingResource[] = [];
 

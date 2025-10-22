@@ -14,6 +14,8 @@ import type {
   ContactFlowModule
 } from "@aws-sdk/client-connect";
 
+import type { FlowInventory } from "../mapping.js";
+
 
 export async function listContactFlows(client: ConnectClient, instanceId: string): Promise<ContactFlowSummary[]> {
   const flows: ContactFlowSummary[] = [];
@@ -68,4 +70,12 @@ export async function describeContactFlowModule(client: ConnectClient, instanceI
   }));
 
   return response.ContactFlowModule!;
+}
+
+
+export async function gatherFlowInventory(client: ConnectClient, instanceId: string): Promise<FlowInventory> {
+  return {
+    flows: await listContactFlows(client, instanceId),
+    modules: await listContactFlowModules(client, instanceId)
+  };
 }

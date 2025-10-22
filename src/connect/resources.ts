@@ -22,6 +22,8 @@ import type {
   AgentStatusSummary
 } from "@aws-sdk/client-connect";
 
+import type { ResourceInventory } from "../mapping.js";
+
 
 export async function listQueues(client: ConnectClient, instanceId: string): Promise<QueueSummary[]> {
   const queues: QueueSummary[] = [];
@@ -204,4 +206,18 @@ export async function listAgentStatuses(client: ConnectClient, instanceId: strin
   } while (nextToken);
 
   return agentStatuses;
+}
+
+
+export async function gatherResourceInventory(client: ConnectClient, instanceId: string): Promise<ResourceInventory> {
+  return {
+    queues: await listQueues(client, instanceId),
+    prompts: await listPrompts(client, instanceId),
+    routingProfiles: await listRoutingProfiles(client, instanceId),
+    hoursOfOperations: await listHoursOfOperations(client, instanceId),
+    quickConnects: await listQuickConnects(client, instanceId),
+    securityProfiles: await listSecurityProfiles(client, instanceId),
+    hierarchyGroups: await listUserHierarchyGroups(client, instanceId),
+    agentStatuses: await listAgentStatuses(client, instanceId)
+  };
 }
