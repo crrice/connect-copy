@@ -1,0 +1,34 @@
+{
+  "name": "connect-flow-copy",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "A TypeScript CLI tool to safely copy contact flows and flow modules between Amazon Connect instances (e.g., dev → prod). Supports copying between instances in the same or different AWS accounts and regions.",
+  "main": "dist/index.js",
+  "bin": {
+    "connect-flow-copy": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "aws",
+    "amazon-connect",
+    "contact-flow",
+    "cli",
+    "typescript"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^24.7.2",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@aws-sdk/client-connect": "^3.908.0",
+    "@aws-sdk/credential-providers": "^3.908.0",
+    "commander": "^14.0.1",
+    "minimatch": "^10.0.3"
+  }
+}
