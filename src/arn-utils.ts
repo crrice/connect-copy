@@ -26,9 +26,7 @@ function getNestedValue(obj: any, path: string): any {
   let current = obj;
 
   for (const part of parts) {
-    if (current == null || typeof current !== 'object') {
-      return undefined;
-    }
+    if (current == null || typeof current !== 'object') return undefined;
     current = current[part];
   }
 
@@ -44,29 +42,19 @@ function getNestedValue(obj: any, path: string): any {
  * - S3 URIs
  */
 function isArnOrResourceId(value: any): boolean {
-  if (typeof value !== 'string' || value.length === 0) {
-    return false;
-  }
+  if (typeof value !== 'string' || value.length === 0) return false;
 
   // Skip dynamic references like $.Attributes.something
-  if (value.startsWith('$.')) {
-    return false;
-  }
+  if (value.startsWith('$.')) return false;
 
   // Match ARNs
-  if (value.startsWith('arn:aws:')) {
-    return true;
-  }
+  if (value.startsWith('arn:aws:')) return true;
 
   // Match S3 URIs
-  if (value.startsWith('s3://')) {
-    return true;
-  }
+  if (value.startsWith('s3://')) return true;
 
   // Match UUID-like resource IDs (36 characters with dashes)
-  if (/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value)) {
-    return true;
-  }
+  if (/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value)) return true;
 
   return false;
 }
@@ -113,9 +101,7 @@ export function extractDependencyArnsFromFlow(resource: ContactFlow | ContactFlo
     const jsonString = JSON.stringify(parameters);
     const regexMatches = jsonString.match(ARN_PATTERN);
 
-    if (regexMatches) {
-      regexMatches.forEach(arn => arns.add(arn));
-    }
+    if (regexMatches) regexMatches.forEach(arn => arns.add(arn));
   }
 
   return Array.from(arns);
