@@ -28,7 +28,7 @@ export interface ConnectConfig {
   };
 }
 
-export interface ResourceInventory {
+export interface FlowInventory {
   sourceFlowsToCopy: ContactFlowSummary[];
   sourceModulesToCopy: ContactFlowModuleSummary[];
   targetFlowsByName: Record<string, ContactFlowSummary>;
