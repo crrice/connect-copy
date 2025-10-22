@@ -164,3 +164,21 @@ CODE MODIFICATIONS - CRITICAL:
 - Prefer localized changes over distributed modifications - single insertion/replacement when possible
 - When showing code for the first time in a conversation, show the complete code. For subsequent modifications, you may show just the modified portions if the code is very long
 - Even when I say something "doesn't work" or "has an error", do not modify code unless I explicitly ask for the modification
+
+GIT COMMIT MESSAGE FORMAT:
+- Use natural English sentences (not conventional commit types like "feat:", "fix:", etc.)
+- Start with a capital letter and end with punctuation (period)
+- Format: `<Subject line>.` followed by blank line, then optional body with details
+- Subject line should describe what the commit does in imperative mood when possible
+- Body should provide context using bullet points or paragraphs
+- Use markdown formatting in body when helpful (code blocks, lists, bold/italic)
+- Examples:
+  ```
+  Add flow filtering with pattern matching.
+
+  Implements `matchesFlowFilters()` using minimatch for glob-style include/exclude patterns (e.g., "Test_*", "Draft_*").
+  ```
+
+  ```
+  Initial commit.
+  ```
