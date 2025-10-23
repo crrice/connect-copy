@@ -102,12 +102,16 @@ export function reportResourceDifferences(sourceInventory: InstanceInventory, ta
   const mappings = buildAllResourceMappings(sourceInventory, targetInventory);
 
   if (mappings.missingResources.length === 0) {
+    console.log("\n" + "=".repeat(50));
+    console.log("Resource Inventory Comparison");
+    console.log("=".repeat(50) + "\n");
     console.log("✓ All resources from source exist in target!\n");
     return false;
   }
 
-  console.log("\nMissing Resources in Target Instance:");
-  console.log("======================================\n");
+  console.log("\n" + "=".repeat(50));
+  console.log("Resource Inventory Comparison");
+  console.log("=".repeat(50) + "\n");
 
   const allResourceTypes = [
     "Flow",
@@ -147,20 +151,31 @@ export function reportResourceDifferences(sourceInventory: InstanceInventory, ta
     return type + "s";
   };
 
-  for (const type of hasMissing) {
-    const names = byType.get(type)!;
-    console.log(`${pluralize(type)} (${names.length} missing):`);
-    for (const name of names) {
-      console.log(`  - ${name}`);
+  if (hasMissing.length > 0) {
+    console.log("❌ Missing Resources:");
+    console.log("===================\n");
+
+    for (const type of hasMissing) {
+      const names = byType.get(type)!;
+      console.log(`${pluralize(type)} (${names.length} missing):`);
+      for (const name of names) {
+        console.log(`  - ${name}`);
+      }
+      console.log();
+    }
+  }
+
+  if (noMissing.length > 0) {
+    console.log("✓ Resources Present:");
+    console.log("===================\n");
+
+    for (const type of noMissing) {
+      console.log(`${pluralize(type)} (0 missing)`);
     }
     console.log();
   }
 
-  for (const type of noMissing) {
-    console.log(`${pluralize(type)} (0 missing)`);
-  }
-
-  console.log(`Total: ${mappings.missingResources.length} resources in source but not in target`);
+  console.log(`Total: ${mappings.missingResources.length} resources in source but not in target\n`);
   return true;
 }
 
@@ -195,7 +210,7 @@ export function displayValidationReport(result: ValidationResult) {
 
   if (result.warnings.length > 0) {
     console.log("\n⚠️  Warnings:");
-    console.log("=============\n");
+    console.log("===========\n");
     for (const warning of result.warnings) {
       console.log(`  - ${warning.message}`);
       if (warning.details) {
