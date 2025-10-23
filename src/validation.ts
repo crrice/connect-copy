@@ -16,6 +16,10 @@ export interface ConnectConfig {
     include?: string[];
     exclude?: string[];
   };
+  viewFilters?: {
+    include?: string[];
+    exclude?: string[];
+  };
 }
 
 

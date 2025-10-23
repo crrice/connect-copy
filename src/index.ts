@@ -2,6 +2,7 @@
 
 import { Command } from "commander";
 import { copyFlows } from "./copy-flows.js";
+import { copyViews } from "./copy-views.js";
 import { runReport } from "./report.js";
 
 const program = new Command();
@@ -32,6 +33,17 @@ program
   .option("--resources-only", "Only report resource differences, skip flow validation", false)
   .option("--verbose", "Enable detailed logging", false)
   .action(runReport);
+
+program
+  .command("copy-views")
+  .description("Copy views between instances")
+  .requiredOption("--source-config <path>", "Path to source configuration file")
+  .requiredOption("--target-config <path>", "Path to target configuration file")
+  .requiredOption("--source-profile <profile>", "AWS profile for source account")
+  .requiredOption("--target-profile <profile>", "AWS profile for target account")
+  .option("--include-aws-managed", "Include AWS managed views", false)
+  .option("--verbose", "Enable detailed logging", false)
+  .action(copyViews);
 
 program.parse();
 
