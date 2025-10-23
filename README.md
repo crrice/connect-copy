@@ -130,10 +130,11 @@ The tool operates in three phases:
 
 ### Phase 1: Validation
 
-The tool reads from both instances and validates:
-- All required resources (queues, prompts, etc.) exist in target
-- All ARN references can be mapped to target resources
-- Target instance has appropriate permissions
+The tool reads from both instances and:
+- Reports resource differences (missing queues, prompts, etc.)
+- Compares flow/module content to identify what needs copying
+- Validates dependencies only for flows/modules that differ
+- Checks target instance permissions
 
 **If validation fails, the tool exits without making any changes.**
 
@@ -170,6 +171,7 @@ These resources are matched between instances by **name**:
 - Security profiles
 - User hierarchies
 - Agent statuses
+- Views
 
 ### Environment-Specific Resources
 

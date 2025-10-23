@@ -16,6 +16,7 @@ Tool to copy contact flows from one Amazon Connect instance to another (e.g., de
 - Agent statuses
 - Security profiles
 - User hierarchies
+- Views
 
 ### Environment-Specific Resources (must pre-exist in target)
 - **Lambda functions** - ARNs differ across accounts/regions, must exist in target
@@ -35,7 +36,9 @@ Tool to copy contact flows from one Amazon Connect instance to another (e.g., de
 
 1. **Phase 1: Validation**
    - Read all resources from source and target
-   - Validate all dependencies exist in target
+   - Report resource differences
+   - Compare flow/module content between instances
+   - Validate dependencies only for flows/modules that differ
    - Check permissions
    - Exit without changes if validation fails
 
@@ -97,14 +100,59 @@ Tool requires two config files (source and target), each containing:
 - `instanceId` - Amazon Connect instance ID
 - `region` - AWS region
 - `flowFilters` - Optional include/exclude patterns for flow selection
+- `moduleFilters` - Optional include/exclude patterns for module selection
+- `viewFilters` - Optional include/exclude patterns for view selection
 
-### Command-Line Options
+### Commands
+
+**Main Copy Command**
+```bash
+connect-flow-copy copy \
+  --source-config <path> \
+  --target-config <path> \
+  --source-profile <profile> \
+  --target-profile <profile> \
+  [--no-publish] \
+  [--verbose]
+```
+
+Options:
 - `--source-config` (required) - Path to source config JSON
 - `--target-config` (required) - Path to target config JSON
 - `--source-profile` (required) - AWS profile for source account
 - `--target-profile` (required) - AWS profile for target account
 - `--no-publish` (optional) - Keep all flows as SAVED regardless of source state
 - `--verbose` (optional) - Enable detailed logging
+
+**Report Command** - Validate without copying:
+```bash
+connect-flow-copy report \
+  --source-config <path> \
+  --target-config <path> \
+  --source-profile <profile> \
+  --target-profile <profile> \
+  [--resources-only] \
+  [--verbose]
+```
+
+Options:
+- `--resources-only` (optional) - Only report resource differences, skip flow validation
+- `--verbose` (optional) - Show detailed per-flow comparison results
+
+**Copy Views Command** - Copy views separately:
+```bash
+connect-flow-copy copy-views \
+  --source-config <path> \
+  --target-config <path> \
+  --source-profile <profile> \
+  --target-profile <profile> \
+  [--include-aws-managed] \
+  [--verbose]
+```
+
+Options:
+- `--include-aws-managed` (optional) - Include AWS managed views (default: skip)
+- `--verbose` (optional) - Show detailed per-view comparison results
 
 ## Key Considerations
 
