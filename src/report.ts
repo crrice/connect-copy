@@ -1,6 +1,6 @@
 
 import { readFile } from "fs/promises";
-import type { ContactFlow, ContactFlowModule } from "@aws-sdk/client-connect";
+import type { ConnectClient, ContactFlow, ContactFlowModule, ContactFlowSummary, ContactFlowModuleSummary } from "@aws-sdk/client-connect";
 import { createConnectClient } from "./connect/client.js";
 import { gatherFlowInventory, describeContactFlow, describeContactFlowModule } from "./connect/flows.js";
 import { gatherResourceInventory } from "./connect/resources.js";
@@ -21,15 +21,37 @@ export interface ReportOptions {
 }
 
 
-export async function runReport(options: ReportOptions) {
-  const sourceConfigData = await readFile(options.sourceConfig, "utf-8");
-  const targetConfigData = await readFile(options.targetConfig, "utf-8");
+export interface FlowComparisonResult {
+  valid: boolean;
+  flowsToCreate: number;
+  flowsToUpdate: number;
+  flowsToSkip: number;
+  modulesToCreate: number;
+  modulesToUpdate: number;
+  modulesToSkip: number;
+  validationResult: ValidationResult;
+}
+
+
+export interface SetupResult {
+  sourceClient: ConnectClient;
+  targetClient: ConnectClient;
+  sourceConfig: ConnectConfig;
+  targetConfig: ConnectConfig;
+  sourceInventory: InstanceInventory;
+  targetInventory: InstanceInventory;
+}
+
+
+export async function setupInstanceComparison(sourceConfigPath: string, targetConfigPath: string, sourceProfile: string, targetProfile: string): Promise<SetupResult> {
+  const sourceConfigData = await readFile(sourceConfigPath, "utf-8");
+  const targetConfigData = await readFile(targetConfigPath, "utf-8");
 
   const sourceConfig: ConnectConfig = JSON.parse(sourceConfigData);
   const targetConfig: ConnectConfig = JSON.parse(targetConfigData);
 
-  const sourceClient = createConnectClient(sourceConfig.region, options.sourceProfile);
-  const targetClient = createConnectClient(targetConfig.region, options.targetProfile);
+  const sourceClient = createConnectClient(sourceConfig.region, sourceProfile);
+  const targetClient = createConnectClient(targetConfig.region, targetProfile);
 
   console.log("Gathering resource inventories...");
 
@@ -49,10 +71,23 @@ export async function runReport(options: ReportOptions) {
     modules: targetFlows.modules
   };
 
-  reportResourceDifferences(sourceInventory, targetInventory);
+  return {
+    sourceClient,
+    targetClient,
+    sourceConfig,
+    targetConfig,
+    sourceInventory,
+    targetInventory
+  };
+}
 
-  if (!options.resourcesOnly) {
-    console.log("\nApplying filters...");
+
+export async function compareAndValidateFlows(sourceClient: any, targetClient: any, sourceConfig: ConnectConfig, targetConfig: ConnectConfig, sourceInventory: InstanceInventory, targetInventory: InstanceInventory, verbose: boolean): Promise<FlowComparisonResult> {
+    console.log("\n" + "=".repeat(50));
+    console.log("Flow Content Comparison");
+    console.log("=".repeat(50) + "\n");
+
+    console.log("Applying filters...");
 
     const sourceFlowsToCopy = sourceInventory.flows.filter(flow =>
       matchesFlowFilters(flow.Name ?? "", sourceConfig.flowFilters)
@@ -66,18 +101,89 @@ export async function runReport(options: ReportOptions) {
 
     console.log("Describing flows and modules...");
 
+    const targetFlowsByName = new Map(targetInventory.flows.map(f => [f.Name!, f]));
+    const targetModulesByName = new Map(targetInventory.modules.map(m => [m.Name!, m]));
+
     const sourceFlowDetails = new Map<string, ContactFlow>();
     const sourceModuleDetails = new Map<string, ContactFlowModule>();
+    const flowsToValidate: ContactFlowSummary[] = [];
+    const modulesToValidate: ContactFlowModuleSummary[] = [];
+
+    let flowsToCreate = 0;
+    let flowsToUpdate = 0;
+    let flowsToSkip = 0;
 
     for (const flowSummary of sourceFlowsToCopy) {
-      const fullFlow = await describeContactFlow(sourceClient, sourceConfig.instanceId, flowSummary.Id!);
-      sourceFlowDetails.set(flowSummary.Id!, fullFlow);
+      const flowName = flowSummary.Name!;
+      const sourceFlowFull = await describeContactFlow(sourceClient, sourceConfig.instanceId, flowSummary.Id!);
+      const targetFlow = targetFlowsByName.get(flowName);
+
+      if (!targetFlow) {
+        sourceFlowDetails.set(flowSummary.Id!, sourceFlowFull);
+        flowsToValidate.push(flowSummary);
+        flowsToCreate++;
+        if (verbose) {
+          console.log(`  ${flowName}: Create (does not exist in target)`);
+        }
+        continue;
+      }
+
+      const targetFlowFull = await describeContactFlow(targetClient, targetConfig.instanceId, targetFlow.Id!);
+
+      if (sourceFlowFull.Content !== targetFlowFull.Content) {
+        sourceFlowDetails.set(flowSummary.Id!, sourceFlowFull);
+        flowsToValidate.push(flowSummary);
+        flowsToUpdate++;
+        if (verbose) {
+          console.log(`  ${flowName}: Update (content differs)`);
+        }
+      } else {
+        flowsToSkip++;
+        if (verbose) {
+          console.log(`  ${flowName}: Skip (content matches)`);
+        }
+      }
     }
 
+    let modulesToCreate = 0;
+    let modulesToUpdate = 0;
+    let modulesToSkip = 0;
+
     for (const moduleSummary of sourceModulesToCopy) {
-      const fullModule = await describeContactFlowModule(sourceClient, sourceConfig.instanceId, moduleSummary.Id!);
-      sourceModuleDetails.set(moduleSummary.Id!, fullModule);
+      const moduleName = moduleSummary.Name!;
+      const sourceModuleFull = await describeContactFlowModule(sourceClient, sourceConfig.instanceId, moduleSummary.Id!);
+      const targetModule = targetModulesByName.get(moduleName);
+
+      if (!targetModule) {
+        sourceModuleDetails.set(moduleSummary.Id!, sourceModuleFull);
+        modulesToValidate.push(moduleSummary);
+        modulesToCreate++;
+        if (verbose) {
+          console.log(`  ${moduleName}: Create (does not exist in target)`);
+        }
+        continue;
+      }
+
+      const targetModuleFull = await describeContactFlowModule(targetClient, targetConfig.instanceId, targetModule.Id!);
+
+      if (sourceModuleFull.Content !== targetModuleFull.Content) {
+        sourceModuleDetails.set(moduleSummary.Id!, sourceModuleFull);
+        modulesToValidate.push(moduleSummary);
+        modulesToUpdate++;
+        if (verbose) {
+          console.log(`  ${moduleName}: Update (content differs)`);
+        }
+      } else {
+        modulesToSkip++;
+        if (verbose) {
+          console.log(`  ${moduleName}: Skip (content matches)`);
+        }
+      }
     }
+
+    console.log(`\nComparison summary:`);
+    console.log(`  Flows: ${flowsToCreate} create, ${flowsToUpdate} update, ${flowsToSkip} skip`);
+    console.log(`  Modules: ${modulesToCreate} create, ${modulesToUpdate} update, ${modulesToSkip} skip`);
 
     console.log("\n" + "=".repeat(50));
     console.log("Flow Dependency Validation");
@@ -86,14 +192,40 @@ export async function runReport(options: ReportOptions) {
     const validationResult = validateFlowDependencies(
       sourceInventory,
       targetInventory,
-      sourceFlowsToCopy,
-      sourceModulesToCopy,
+      flowsToValidate,
+      modulesToValidate,
       sourceFlowDetails,
       sourceModuleDetails,
-      options.verbose
+      verbose
     );
 
     displayValidationReport(validationResult);
+
+    return {
+      valid: validationResult.valid,
+      flowsToCreate,
+      flowsToUpdate,
+      flowsToSkip,
+      modulesToCreate,
+      modulesToUpdate,
+      modulesToSkip,
+      validationResult
+    };
+}
+
+
+export async function runReport(options: ReportOptions) {
+  const { sourceClient, targetClient, sourceConfig, targetConfig, sourceInventory, targetInventory } = await setupInstanceComparison(
+    options.sourceConfig,
+    options.targetConfig,
+    options.sourceProfile,
+    options.targetProfile
+  );
+
+  reportResourceDifferences(sourceInventory, targetInventory);
+
+  if (!options.resourcesOnly) {
+    await compareAndValidateFlows(sourceClient, targetClient, sourceConfig, targetConfig, sourceInventory, targetInventory, options.verbose);
   }
 }
 
