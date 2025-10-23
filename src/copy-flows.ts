@@ -1,8 +1,10 @@
 
 import { readFile } from "fs/promises";
+
 import type { ContactFlowSummary, ContactFlowModuleSummary } from "@aws-sdk/client-connect";
+
 import { createConnectClient } from "./connect/client.js";
-import { listContactFlows, listContactFlowModules, describeContactFlowModule } from "./connect/flows.js";
+import { gatherFlowInventory, describeContactFlowModule } from "./connect/flows.js";
 import { matchesFlowFilters } from "./filters.js";
 import { extractDependencyArnsFromFlow } from "./arn-utils.js";
 
@@ -46,36 +48,35 @@ export async function copyFlows(options: CopyFlowsOptions) {
   const sourceClient = createConnectClient(sourceConfig.region, options.sourceProfile);
   const targetClient = createConnectClient(targetConfig.region, options.targetProfile);
 
-  console.log("Gathering resource inventory...");
+  console.log("Gathering resource inventories...");
 
-  const allSourceFlows = await listContactFlows(sourceClient, sourceConfig.instanceId);
-  const sourceFlowsToCopy = allSourceFlows.filter(flow =>
+  const sourceFlows = await gatherFlowInventory(sourceClient, sourceConfig.instanceId);
+  const targetFlows = await gatherFlowInventory(targetClient, targetConfig.instanceId);
+
+  // TODO: Gather full inventories and build mappings for validation
+  // const sourceResources = await gatherResourceInventory(sourceClient, sourceConfig.instanceId);
+  // const sourceInventory = buildInstanceInventory(sourceFlows, sourceResources);
+  // const targetResources = await gatherResourceInventory(targetClient, targetConfig.instanceId);
+  // const targetInventory = buildInstanceInventory(targetFlows, targetResources);
+  // const mappings = buildAllResourceMappings(sourceInventory, targetInventory);
+
+  const sourceFlowsToCopy = sourceFlows.flows.filter(flow =>
     matchesFlowFilters(flow.Name ?? "", sourceConfig.flowFilters)
   );
 
-  const allSourceModules = await listContactFlowModules(sourceClient, sourceConfig.instanceId);
-  const sourceModulesToCopy = allSourceModules.filter(module =>
+  const sourceModulesToCopy = sourceFlows.modules.filter(module =>
     matchesFlowFilters(module.Name ?? "", sourceConfig.moduleFilters)
   );
 
-  const allTargetFlows = await listContactFlows(targetClient, targetConfig.instanceId);
   const targetFlowsByName = Object.fromEntries(
-    allTargetFlows.map(flow => [flow.Name!, flow])
+    targetFlows.flows.map(flow => [flow.Name!, flow])
   );
 
-  const allTargetModules = await listContactFlowModules(targetClient, targetConfig.instanceId);
   const targetModulesByName = Object.fromEntries(
-    allTargetModules.map(module => [module.Name!, module])
+    targetFlows.modules.map(module => [module.Name!, module])
   );
 
-  // const inventory: ResourceInventory = {
-  //   sourceFlowsToCopy,
-  //   sourceModulesToCopy,
-  //   targetFlowsByName,
-  //   targetModulesByName
-  // };
-
-  console.log(`Source: ${sourceFlowsToCopy.length} flows (${allSourceFlows.length} total, ${allSourceFlows.length - sourceFlowsToCopy.length} filtered), ${sourceModulesToCopy.length} modules (${allSourceModules.length} total, ${allSourceModules.length - sourceModulesToCopy.length} filtered)`);
+  console.log(`Source: ${sourceFlowsToCopy.length} flows (${sourceFlows.flows.length} total, ${sourceFlows.flows.length - sourceFlowsToCopy.length} filtered), ${sourceModulesToCopy.length} modules (${sourceFlows.modules.length} total, ${sourceFlows.modules.length - sourceModulesToCopy.length} filtered)`);
   console.log(`Target: ${Object.keys(targetFlowsByName).length} flows, ${Object.keys(targetModulesByName).length} modules`);
 
   console.log("\nAnalyzing module dependencies...");
