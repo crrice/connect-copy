@@ -1,7 +1,8 @@
 
 
 import { readFile } from "fs/promises";
-import { DescribeViewCommand } from "@aws-sdk/client-connect";
+import { createInterface } from "readline";
+import { DescribeViewCommand, CreateViewCommand, UpdateViewContentCommand, TagResourceCommand, UntagResourceCommand } from "@aws-sdk/client-connect";
 
 import type { ConnectClient, View } from "@aws-sdk/client-connect";
 
@@ -18,6 +19,21 @@ export interface CopyViewsOptions {
   targetProfile: string;
   includeAwsManaged: boolean;
   verbose: boolean;
+}
+
+
+async function promptContinue(message: string): Promise<boolean> {
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+
+  return new Promise(resolve => {
+    rl.question(`\n${message} (y/n): `, answer => {
+      rl.close();
+      resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
+    });
+  });
 }
 
 
@@ -49,6 +65,23 @@ function viewContentMatches(sourceView: View, targetView: View): boolean {
 
   return sourceContent.InputSchema === targetContent.InputSchema &&
          sourceContent.Template === targetContent.Template;
+}
+
+
+function viewTagsMatch(sourceView: View, targetView: View): boolean {
+  const sourceTags = sourceView.Tags ?? {};
+  const targetTags = targetView.Tags ?? {};
+
+  const sourceKeys = Object.keys(sourceTags).sort();
+  const targetKeys = Object.keys(targetTags).sort();
+
+  if (sourceKeys.length !== targetKeys.length) return false;
+
+  for (const key of sourceKeys) {
+    if (sourceTags[key] !== targetTags[key]) return false;
+  }
+
+  return true;
 }
 
 
@@ -91,9 +124,16 @@ export async function copyViews(options: CopyViewsOptions) {
 
   const targetViewsByName = new Map(targetViews.map(v => [v.Name!, v]));
 
-  let toCreate = 0;
-  let toUpdate = 0;
-  let toSkip = 0;
+  interface ViewAction {
+    viewName: string;
+    action: 'create' | 'update' | 'skip';
+    sourceView: View;
+    targetViewId?: string;
+    targetViewArn?: string;
+    tagsNeedUpdate?: boolean;
+  }
+
+  const viewActions: ViewAction[] = [];
 
   console.log("\nAnalyzing view differences...");
 
@@ -105,7 +145,11 @@ export async function copyViews(options: CopyViewsOptions) {
     const sourceViewFull = await describeView(sourceClient, sourceConfig.instanceId, viewIdentifier);
 
     if (!targetView) {
-      toCreate++;
+      viewActions.push({
+        viewName,
+        action: 'create',
+        sourceView: sourceViewFull
+      });
       if (options.verbose) {
         console.log(`  ${viewName}: Create (does not exist in target)`);
       }
@@ -116,25 +160,157 @@ export async function copyViews(options: CopyViewsOptions) {
     const targetViewIdentifier = targetView.Type === 'AWS_MANAGED' ? targetView.Arn! : targetView.Id!;
     const targetViewFull = await describeView(targetClient, targetConfig.instanceId, targetViewIdentifier);
 
-    if (viewContentMatches(sourceViewFull, targetViewFull)) {
-      toSkip++;
+    const contentMatches = viewContentMatches(sourceViewFull, targetViewFull);
+    const tagsMatch = viewTagsMatch(sourceViewFull, targetViewFull);
+
+    if (contentMatches && tagsMatch) {
+      viewActions.push({
+        viewName,
+        action: 'skip',
+        sourceView: sourceViewFull,
+        targetViewId: targetView.Id!,
+        targetViewArn: targetView.Arn!
+      });
       if (options.verbose) {
-        console.log(`  ${viewName}: Skip (content matches)`);
+        console.log(`  ${viewName}: Skip (content and tags match)`);
       }
 
       continue;
     }
 
-    toUpdate++;
+    if (contentMatches && !tagsMatch) {
+      viewActions.push({
+        viewName,
+        action: 'skip',
+        sourceView: sourceViewFull,
+        targetViewId: targetView.Id!,
+        targetViewArn: targetView.Arn!,
+        tagsNeedUpdate: true
+      });
+      if (options.verbose) {
+        console.log(`  ${viewName}: Update tags only (content matches, tags differ)`);
+      }
+
+      continue;
+    }
+
+    viewActions.push({
+      viewName,
+      action: 'update',
+      sourceView: sourceViewFull,
+      targetViewId: targetView.Id!,
+      targetViewArn: targetView.Arn!,
+      tagsNeedUpdate: !tagsMatch
+    });
     if (options.verbose) {
-      console.log(`  ${viewName}: Update (content differs)`);
+      console.log(`  ${viewName}: Update (content differs${!tagsMatch ? ', tags differ' : ''})`);
     }
   }
+
+  const copyableActions = viewActions.filter(a => {
+    if (a.action === 'skip') return true;
+
+    const viewSummary = viewsToCopy.find(v => v.Name === a.viewName);
+    return viewSummary?.Type !== 'AWS_MANAGED';
+  });
+
+  const awsManagedFiltered = viewActions.length - copyableActions.length;
+
+  const toCreate = copyableActions.filter(a => a.action === 'create').length;
+  const toUpdate = copyableActions.filter(a => a.action === 'update').length;
+  const toUpdateTagsOnly = copyableActions.filter(a => a.action === 'skip' && a.tagsNeedUpdate).length;
+  const toSkip = copyableActions.filter(a => a.action === 'skip' && !a.tagsNeedUpdate).length;
 
   console.log(`\nSummary:`);
   console.log(`  Views to create: ${toCreate}`);
   console.log(`  Views to update: ${toUpdate}`);
+  if (toUpdateTagsOnly > 0) {
+    console.log(`  Views to update tags only: ${toUpdateTagsOnly}`);
+  }
   console.log(`  Views to skip: ${toSkip}`);
+  if (awsManagedFiltered > 0) {
+    console.log(`  AWS managed views filtered: ${awsManagedFiltered}`);
+  }
   console.log(`  Total processed: ${viewsToCopy.length}`);
+
+  if (toCreate === 0 && toUpdate === 0 && toUpdateTagsOnly === 0) {
+    console.log("\nNo views need to be copied - all views match");
+    return;
+  }
+
+  const shouldContinue = await promptContinue("Proceed with copying views?");
+  if (!shouldContinue) {
+    console.log("Copy cancelled by user");
+    return;
+  }
+
+  console.log("\nCopying views...");
+
+  for (const action of copyableActions) {
+    if (action.action === 'skip' && !action.tagsNeedUpdate) continue;
+
+    if (action.action === 'create') {
+      console.log(`Creating view: ${action.viewName}`);
+      await targetClient.send(
+        new CreateViewCommand({
+          InstanceId: targetConfig.instanceId,
+          Name: action.sourceView.Name,
+          Description: action.sourceView.Description,
+          Status: action.sourceView.Status,
+          Content: action.sourceView.Content,
+          Tags: action.sourceView.Tags
+        })
+      );
+    }
+
+    if (action.action === 'update') {
+      console.log(`Updating view: ${action.viewName}`);
+      await targetClient.send(
+        new UpdateViewContentCommand({
+          InstanceId: targetConfig.instanceId,
+          ViewId: action.targetViewId!,
+          Status: action.sourceView.Status,
+          Content: action.sourceView.Content
+        })
+      );
+    }
+
+    if (action.tagsNeedUpdate) {
+      console.log(`Updating tags for view: ${action.viewName}`);
+
+      const sourceTags = action.sourceView.Tags ?? {};
+      const targetViewFull = await describeView(targetClient, targetConfig.instanceId, action.targetViewId!);
+      const targetTags = targetViewFull.Tags ?? {};
+
+      const tagsToAdd: Record<string, string> = {};
+      for (const [key, value] of Object.entries(sourceTags)) {
+        if (targetTags[key] !== value) {
+          tagsToAdd[key] = value;
+        }
+      }
+
+      const tagsToRemove = Object.keys(targetTags).filter(key => !(key in sourceTags));
+
+      if (Object.keys(tagsToAdd).length > 0) {
+        await targetClient.send(
+          new TagResourceCommand({
+            resourceArn: action.targetViewArn!,
+            tags: tagsToAdd
+          })
+        );
+      }
+
+      if (tagsToRemove.length > 0) {
+        await targetClient.send(
+          new UntagResourceCommand({
+            resourceArn: action.targetViewArn!,
+            tagKeys: tagsToRemove
+          })
+        );
+      }
+    }
+  }
+
+  console.log(`\nCopy complete: ${toCreate} created, ${toUpdate} updated, ${toUpdateTagsOnly} tags updated, ${toSkip} skipped`);
 }
 
