@@ -109,6 +109,20 @@ export function reportResourceDifferences(sourceInventory: InstanceInventory, ta
   console.log("\nMissing Resources in Target Instance:");
   console.log("======================================\n");
 
+  const allResourceTypes = [
+    "Flow",
+    "Module",
+    "Queue",
+    "Prompt",
+    "Routing Profile",
+    "Hours of Operation",
+    "Quick Connect",
+    "Security Profile",
+    "Hierarchy Group",
+    "Agent Status",
+    "View"
+  ];
+
   const byType = new Map<string, string[]>();
   for (const missing of mappings.missingResources) {
     const names = byType.get(missing.type) ?? [];
@@ -116,12 +130,34 @@ export function reportResourceDifferences(sourceInventory: InstanceInventory, ta
     byType.set(missing.type, names);
   }
 
-  for (const [type, names] of byType) {
-    console.log(`${type}s (${names.length} missing):`);
+  const hasMissing: string[] = [];
+  const noMissing: string[] = [];
+
+  for (const type of allResourceTypes) {
+    if (byType.has(type)) {
+      hasMissing.push(type);
+    } else {
+      noMissing.push(type);
+    }
+  }
+
+  const pluralize = (type: string): string => {
+    if (type === "Agent Status") return "Agent Statuses";
+    if (type === "Hierarchy Group") return "Hierarchy Groups";
+    return type + "s";
+  };
+
+  for (const type of hasMissing) {
+    const names = byType.get(type)!;
+    console.log(`${pluralize(type)} (${names.length} missing):`);
     for (const name of names) {
       console.log(`  - ${name}`);
     }
     console.log();
+  }
+
+  for (const type of noMissing) {
+    console.log(`${pluralize(type)} (0 missing)`);
   }
 
   console.log(`Total: ${mappings.missingResources.length} resources in source but not in target`);
