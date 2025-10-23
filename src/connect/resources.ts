@@ -7,7 +7,8 @@ import {
   ListQuickConnectsCommand,
   ListSecurityProfilesCommand,
   ListUserHierarchyGroupsCommand,
-  ListAgentStatusesCommand
+  ListAgentStatusesCommand,
+  ListViewsCommand
 } from "@aws-sdk/client-connect";
 
 import type {
@@ -19,7 +20,8 @@ import type {
   QuickConnectSummary,
   SecurityProfileSummary,
   HierarchyGroupSummary,
-  AgentStatusSummary
+  AgentStatusSummary,
+  ViewSummary
 } from "@aws-sdk/client-connect";
 
 import type { ResourceInventory } from "../mapping.js";
@@ -209,6 +211,29 @@ export async function listAgentStatuses(client: ConnectClient, instanceId: strin
 }
 
 
+export async function listViews(client: ConnectClient, instanceId: string): Promise<ViewSummary[]> {
+  const views: ViewSummary[] = [];
+  let nextToken: string | undefined;
+
+  do {
+    const response = await client.send(
+      new ListViewsCommand({
+        InstanceId: instanceId,
+        NextToken: nextToken
+      })
+    );
+
+    if (response.ViewsSummaryList) {
+      views.push(...response.ViewsSummaryList);
+    }
+
+    nextToken = response.NextToken;
+  } while (nextToken);
+
+  return views;
+}
+
+
 export async function gatherResourceInventory(client: ConnectClient, instanceId: string): Promise<ResourceInventory> {
   return {
     queues: await listQueues(client, instanceId),
@@ -218,6 +243,7 @@ export async function gatherResourceInventory(client: ConnectClient, instanceId:
     quickConnects: await listQuickConnects(client, instanceId),
     securityProfiles: await listSecurityProfiles(client, instanceId),
     hierarchyGroups: await listUserHierarchyGroups(client, instanceId),
-    agentStatuses: await listAgentStatuses(client, instanceId)
+    agentStatuses: await listAgentStatuses(client, instanceId),
+    views: await listViews(client, instanceId)
   };
 }

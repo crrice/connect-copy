@@ -9,7 +9,8 @@ import type {
   QuickConnectSummary,
   SecurityProfileSummary,
   HierarchyGroupSummary,
-  AgentStatusSummary
+  AgentStatusSummary,
+  ViewSummary
 } from "@aws-sdk/client-connect";
 
 import { categorizeArn } from "./arn-utils.js";
@@ -38,6 +39,7 @@ export interface ResourceInventory {
   securityProfiles: SecurityProfileSummary[];
   hierarchyGroups: HierarchyGroupSummary[];
   agentStatuses: AgentStatusSummary[];
+  views: ViewSummary[];
 }
 
 
@@ -58,6 +60,7 @@ export interface InstanceInventory {
   securityProfiles: SecurityProfileSummary[];
   hierarchyGroups: HierarchyGroupSummary[];
   agentStatuses: AgentStatusSummary[];
+  views: ViewSummary[];
 }
 
 
@@ -116,7 +119,8 @@ export function buildAllResourceMappings(source: InstanceInventory, target: Inst
     { source: source.quickConnects, target: target.quickConnects, type: "Quick Connect" },
     { source: source.securityProfiles, target: target.securityProfiles, type: "Security Profile" },
     { source: source.hierarchyGroups, target: target.hierarchyGroups, type: "Hierarchy Group" },
-    { source: source.agentStatuses, target: target.agentStatuses, type: "Agent Status" }
+    { source: source.agentStatuses, target: target.agentStatuses, type: "Agent Status" },
+    { source: source.views, target: target.views, type: "View" }
   ];
 
   for (const resourcePair of resourcePairs) {
@@ -133,14 +137,24 @@ export function buildAllResourceMappings(source: InstanceInventory, target: Inst
 }
 
 
+function normalizeViewArn(arn: string): string {
+  if (arn.includes(':view/')) {
+    return arn.replace(/:(\d+)$/, '');
+  }
+
+  return arn;
+}
+
+
 export function validateDependencies(extractedArns: string[], resourceMappings: ResourceMappings, flowsWillCreate: Set<string>, modulesWillCreate: Set<string>, targetFlowsByArn: Map<string, ContactFlowSummary>, targetModulesByArn: Map<string, ContactFlowModuleSummary>, referencedByName: string): { errors: ValidationError[], warnings: ValidationWarning[] } {
   const errors: ValidationError[] = [];
   const warnings: ValidationWarning[] = [];
 
   for (const arn of extractedArns) {
     const category = categorizeArn(arn);
+    const normalizedArn = normalizeViewArn(arn);
 
-    if (resourceMappings.arnMap.has(arn)) continue;
+    if (resourceMappings.arnMap.has(normalizedArn)) continue;
 
     if (category === 'flow') {
       if (flowsWillCreate.has(arn)) continue;

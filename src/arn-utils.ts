@@ -8,7 +8,7 @@ const ARN_PATTERN = /arn:aws:connect:[a-z0-9-]+:\d+:instance\/[a-f0-9-]+\/[a-z-]
 
 
 export type ArnCategory = 'flow' | 'module' | 'queue' | 'prompt' | 'lambda' |
-                          'lex' | 's3' | 'routing-profile' | 'hours-of-operation' |
+                          'lex' | 's3' | 'view' | 'routing-profile' | 'hours-of-operation' |
                           'quick-connect' | 'security-profile' | 'hierarchy-group' |
                           'agent-status' | 'unknown';
 
@@ -19,6 +19,7 @@ export function categorizeArn(arn: string): ArnCategory {
   if (arn.includes(':lambda:')) return 'lambda';
   if (arn.includes(':lex:')) return 'lex';
   if (arn.startsWith('s3://')) return 's3';
+  if (arn.includes(':view/')) return 'view';
   if (arn.includes('/queue/')) return 'queue';
   if (arn.includes('/prompt/')) return 'prompt';
   if (arn.includes('/routing-profile/')) return 'routing-profile';
