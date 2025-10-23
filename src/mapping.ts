@@ -12,6 +12,9 @@ import type {
   AgentStatusSummary
 } from "@aws-sdk/client-connect";
 
+import { categorizeArn } from "./arn-utils.js";
+import type { ValidationError, ValidationWarning } from "./validation.js";
+
 
 export interface ResourceMappings {
   arnMap: Map<string, string>;
@@ -99,15 +102,6 @@ function buildResourceMap<T extends { Name?: string | undefined; Arn?: string | 
 }
 
 
-export function buildInstanceInventory(flows: FlowInventory, resources: ResourceInventory): InstanceInventory {
-  return {
-    ...resources,
-    flows: flows.flows,
-    modules: flows.modules
-  };
-}
-
-
 export function buildAllResourceMappings(source: InstanceInventory, target: InstanceInventory): ResourceMappings {
   const arnMap = new Map<string, string>();
   const missingResources: MissingResource[] = [];
@@ -136,4 +130,81 @@ export function buildAllResourceMappings(source: InstanceInventory, target: Inst
   }
 
   return { arnMap, missingResources };
+}
+
+
+export function validateDependencies(extractedArns: string[], resourceMappings: ResourceMappings, flowsWillCreate: Set<string>, modulesWillCreate: Set<string>, targetFlowsByArn: Map<string, ContactFlowSummary>, targetModulesByArn: Map<string, ContactFlowModuleSummary>, referencedByName: string): { errors: ValidationError[], warnings: ValidationWarning[] } {
+  const errors: ValidationError[] = [];
+  const warnings: ValidationWarning[] = [];
+
+  for (const arn of extractedArns) {
+    const category = categorizeArn(arn);
+
+    if (resourceMappings.arnMap.has(arn)) continue;
+
+    if (category === 'flow') {
+      if (flowsWillCreate.has(arn)) continue;
+      if (targetFlowsByArn.has(arn)) continue;
+
+      errors.push({
+        severity: 'error',
+        category: 'missing_resource',
+        resourceType: 'Flow',
+        referencedBy: referencedByName,
+        sourceArn: arn,
+        message: `Flow not found in target and not being copied: ${arn}`
+      });
+
+      continue;
+    }
+
+    if (category === 'module') {
+      if (modulesWillCreate.has(arn)) continue;
+      if (targetModulesByArn.has(arn)) continue;
+
+      errors.push({
+        severity: 'error',
+        category: 'missing_resource',
+        resourceType: 'Module',
+        referencedBy: referencedByName,
+        sourceArn: arn,
+        message: `Module not found in target and not being copied: ${arn}`
+      });
+
+      continue;
+    }
+
+    if (category === 'lambda' || category === 'lex' || category === 's3') {
+      warnings.push({
+        severity: 'warning',
+        category: 'environment_specific',
+        message: `Environment-specific resource referenced: ${arn}`,
+        details: `Must exist in target instance (referenced by ${referencedByName})`
+      });
+
+      continue;
+    }
+
+    if (category === 'unknown') {
+      warnings.push({
+        severity: 'warning',
+        category: 'unknown_reference',
+        message: `Unknown ARN type: ${arn}`,
+        details: `Referenced by ${referencedByName}`
+      });
+
+      continue;
+    }
+
+    errors.push({
+      severity: 'error',
+      category: 'missing_resource',
+      resourceType: category,
+      referencedBy: referencedByName,
+      sourceArn: arn,
+      message: `${category} not found in target: ${arn}`
+    });
+  }
+
+  return { errors, warnings };
 }

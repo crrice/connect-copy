@@ -1,12 +1,14 @@
 
 import { readFile } from "fs/promises";
-
-import type { ContactFlowSummary, ContactFlowModuleSummary } from "@aws-sdk/client-connect";
-
+import { createInterface } from "readline";
+import type { ContactFlow, ContactFlowModule } from "@aws-sdk/client-connect";
 import { createConnectClient } from "./connect/client.js";
-import { gatherFlowInventory, describeContactFlowModule } from "./connect/flows.js";
+import { gatherFlowInventory, describeContactFlow, describeContactFlowModule } from "./connect/flows.js";
+import { gatherResourceInventory } from "./connect/resources.js";
 import { matchesFlowFilters } from "./filters.js";
-import { extractDependencyArnsFromFlow } from "./arn-utils.js";
+import { validateFlowDependencies } from "./validation.js";
+import { reportResourceDifferences, displayValidationReport } from "./report.js";
+import type { ConnectConfig } from "./validation.js";
 
 export interface CopyFlowsOptions {
   sourceConfig: string;
@@ -17,24 +19,19 @@ export interface CopyFlowsOptions {
   verbose: boolean;
 }
 
-export interface ConnectConfig {
-  instanceId: string;
-  region: string;
-  flowFilters?: {
-    include?: string[];
-    exclude?: string[];
-  };
-  moduleFilters?: {
-    include?: string[];
-    exclude?: string[];
-  };
-}
 
-export interface FilteredFlowInventory {
-  sourceFlowsToCopy: ContactFlowSummary[];
-  sourceModulesToCopy: ContactFlowModuleSummary[];
-  targetFlowsByName: Record<string, ContactFlowSummary>;
-  targetModulesByName: Record<string, ContactFlowModuleSummary>;
+async function promptContinue(message: string): Promise<boolean> {
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+
+  return new Promise(resolve => {
+    rl.question(`\n${message} (y/n): `, answer => {
+      rl.close();
+      resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
+    });
+  });
 }
 
 
@@ -48,52 +45,78 @@ export async function copyFlows(options: CopyFlowsOptions) {
   const sourceClient = createConnectClient(sourceConfig.region, options.sourceProfile);
   const targetClient = createConnectClient(targetConfig.region, options.targetProfile);
 
+  console.log("Phase 1: Validating resources...\n");
   console.log("Gathering resource inventories...");
 
   const sourceFlows = await gatherFlowInventory(sourceClient, sourceConfig.instanceId);
+  const sourceResources = await gatherResourceInventory(sourceClient, sourceConfig.instanceId);
+  const sourceInventory = {
+    ...sourceResources,
+    flows: sourceFlows.flows,
+    modules: sourceFlows.modules
+  };
+
   const targetFlows = await gatherFlowInventory(targetClient, targetConfig.instanceId);
+  const targetResources = await gatherResourceInventory(targetClient, targetConfig.instanceId);
+  const targetInventory = {
+    ...targetResources,
+    flows: targetFlows.flows,
+    modules: targetFlows.modules
+  };
 
-  // TODO: Gather full inventories and build mappings for validation
-  // const sourceResources = await gatherResourceInventory(sourceClient, sourceConfig.instanceId);
-  // const sourceInventory = buildInstanceInventory(sourceFlows, sourceResources);
-  // const targetResources = await gatherResourceInventory(targetClient, targetConfig.instanceId);
-  // const targetInventory = buildInstanceInventory(targetFlows, targetResources);
-  // const mappings = buildAllResourceMappings(sourceInventory, targetInventory);
+  const hasMissingResources = reportResourceDifferences(sourceInventory, targetInventory);
 
-  const sourceFlowsToCopy = sourceFlows.flows.filter(flow =>
+  if (hasMissingResources) {
+    const shouldContinue = await promptContinue("Continue to flow validation?");
+    if (!shouldContinue) {
+      console.log("Validation cancelled by user");
+      process.exit(0);
+    }
+  }
+
+  console.log("\nApplying filters...");
+
+  const sourceFlowsToCopy = sourceInventory.flows.filter(flow =>
     matchesFlowFilters(flow.Name ?? "", sourceConfig.flowFilters)
   );
 
-  const sourceModulesToCopy = sourceFlows.modules.filter(module =>
+  const sourceModulesToCopy = sourceInventory.modules.filter(module =>
     matchesFlowFilters(module.Name ?? "", sourceConfig.moduleFilters)
   );
 
-  const targetFlowsByName = Object.fromEntries(
-    targetFlows.flows.map(flow => [flow.Name!, flow])
-  );
+  console.log(`Filtered: ${sourceFlowsToCopy.length} flows (${sourceInventory.flows.length} total), ${sourceModulesToCopy.length} modules (${sourceInventory.modules.length} total)`);
 
-  const targetModulesByName = Object.fromEntries(
-    targetFlows.modules.map(module => [module.Name!, module])
-  );
+  console.log("Describing flows and modules...");
 
-  console.log(`Source: ${sourceFlowsToCopy.length} flows (${sourceFlows.flows.length} total, ${sourceFlows.flows.length - sourceFlowsToCopy.length} filtered), ${sourceModulesToCopy.length} modules (${sourceFlows.modules.length} total, ${sourceFlows.modules.length - sourceModulesToCopy.length} filtered)`);
-  console.log(`Target: ${Object.keys(targetFlowsByName).length} flows, ${Object.keys(targetModulesByName).length} modules`);
+  const sourceFlowDetails = new Map<string, ContactFlow>();
+  const sourceModuleDetails = new Map<string, ContactFlowModule>();
 
-  console.log("\nAnalyzing module dependencies...");
+  for (const flowSummary of sourceFlowsToCopy) {
+    const fullFlow = await describeContactFlow(sourceClient, sourceConfig.instanceId, flowSummary.Id!);
+    sourceFlowDetails.set(flowSummary.Id!, fullFlow);
+  }
 
   for (const moduleSummary of sourceModulesToCopy) {
-    const fullModule = await describeContactFlowModule(
-      sourceClient,
-      sourceConfig.instanceId,
-      moduleSummary.Id!
-    );
-
-    const arns = extractDependencyArnsFromFlow(fullModule);
-
-    if (options.verbose) {
-      console.log(`Module "${fullModule.Name}": ${arns.length} ARN dependencies`);
-      arns.forEach(arn => console.log(`  - ${arn}`));
-    }
+    const fullModule = await describeContactFlowModule(sourceClient, sourceConfig.instanceId, moduleSummary.Id!);
+    sourceModuleDetails.set(moduleSummary.Id!, fullModule);
   }
+
+  const validationResult = validateFlowDependencies(
+    sourceInventory,
+    targetInventory,
+    sourceFlowsToCopy,
+    sourceModulesToCopy,
+    sourceFlowDetails,
+    sourceModuleDetails,
+    options.verbose
+  );
+
+  displayValidationReport(validationResult);
+
+  if (!validationResult.valid) {
+    process.exit(1);
+  }
+
+  console.log("Validation complete - ready for Phase 2 (user confirmation)");
 }
 

@@ -7,6 +7,31 @@ import { getArnFieldsForActionType } from "./arn-field-mapping.js";
 const ARN_PATTERN = /arn:aws:connect:[a-z0-9-]+:\d+:instance\/[a-f0-9-]+\/[a-z-]+\/[a-f0-9-]+/g;
 
 
+export type ArnCategory = 'flow' | 'module' | 'queue' | 'prompt' | 'lambda' |
+                          'lex' | 's3' | 'routing-profile' | 'hours-of-operation' |
+                          'quick-connect' | 'security-profile' | 'hierarchy-group' |
+                          'agent-status' | 'unknown';
+
+
+export function categorizeArn(arn: string): ArnCategory {
+  if (arn.includes('/contact-flow/')) return 'flow';
+  if (arn.includes('/contact-flow-module/')) return 'module';
+  if (arn.includes(':lambda:')) return 'lambda';
+  if (arn.includes(':lex:')) return 'lex';
+  if (arn.startsWith('s3://')) return 's3';
+  if (arn.includes('/queue/')) return 'queue';
+  if (arn.includes('/prompt/')) return 'prompt';
+  if (arn.includes('/routing-profile/')) return 'routing-profile';
+  if (arn.includes('/hours-of-operation/')) return 'hours-of-operation';
+  if (arn.includes('/quick-connect/')) return 'quick-connect';
+  if (arn.includes('/security-profile/')) return 'security-profile';
+  if (arn.includes('/hierarchy-group/')) return 'hierarchy-group';
+  if (arn.includes('/agent-status/')) return 'agent-status';
+
+  return 'unknown';
+}
+
+
 /**
  * Extract ARNs from flow content string using regex pattern matching.
  * This is a fallback method for catching ARNs we might have missed.
