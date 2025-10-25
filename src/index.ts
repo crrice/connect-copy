@@ -20,6 +20,7 @@ program
   .requiredOption("--source-profile <profile>", "AWS profile for source account")
   .requiredOption("--target-profile <profile>", "AWS profile for target account")
   .option("--no-publish", "Keep all flows as SAVED regardless of source state")
+  .option("-y, --yes", "Auto-confirm all prompts", false)
   .option("--verbose", "Enable detailed logging", false)
   .action(copyFlows);
 

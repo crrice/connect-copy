@@ -11,6 +11,7 @@ export interface CopyFlowsOptions {
   sourceProfile: string;
   targetProfile: string;
   publish: boolean;
+  yes: boolean;
   verbose: boolean;
 }
 
@@ -101,7 +102,7 @@ export async function copyFlows(options: CopyFlowsOptions) {
 
   const hasMissingResources = reportResourceDifferences(sourceInventory, targetInventory);
 
-  if (hasMissingResources) {
+  if (hasMissingResources && !options.yes) {
     const shouldContinue = await promptContinue("Continue to flow validation?");
     if (!shouldContinue) {
       console.log("Validation cancelled by user");
@@ -130,10 +131,14 @@ export async function copyFlows(options: CopyFlowsOptions) {
 
   displayCopyPlan(comparisonResult);
 
-  const shouldProceed = await promptConfirm("Proceed with copy? This will create/update flows in the target instance.");
-  if (!shouldProceed) {
-    console.log("Copy cancelled by user");
-    process.exit(0);
+  if (!options.yes) {
+    const shouldProceed = await promptConfirm("Proceed with copy? This will create/update flows in the target instance.");
+    if (!shouldProceed) {
+      console.log("Copy cancelled by user");
+      process.exit(0);
+    }
+  } else {
+    console.log("Auto-confirming copy (--yes flag set)");
   }
 
   console.log("\nPhase 2: User confirmed - ready for Phase 3 (execution)");
