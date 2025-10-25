@@ -1,6 +1,7 @@
 
 import { createInterface } from "readline";
 import { reportResourceDifferences, compareAndValidateFlows, setupInstanceComparison } from "./report.js";
+import { createBackup } from "./backup.js";
 
 import type { FlowComparisonResult } from "./report.js";
 
@@ -141,7 +142,15 @@ export async function copyFlows(options: CopyFlowsOptions) {
     console.log("Auto-confirming copy (--yes flag set)");
   }
 
-  console.log("\nPhase 2: User confirmed - ready for Phase 3 (execution)");
+  console.log("\nPhase 3: Creating backup...");
+  await createBackup(
+    targetClient,
+    targetConfig.instanceId,
+    targetConfig.region,
+    comparisonResult.flowsToUpdateList,
+    comparisonResult.modulesToUpdateList
+  );
+
   console.log("TODO: Implement copy execution");
 }
 
