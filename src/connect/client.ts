@@ -7,6 +7,7 @@ export function createConnectClient(region: string, profile: string) {
   return new ConnectClient({
     region,
     credentials: fromIni({ profile }),
-    retryMode: "adaptive"
+    retryMode: "adaptive",
+    maxAttempts: 10
   });
 }
