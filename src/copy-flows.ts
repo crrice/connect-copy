@@ -1,8 +1,11 @@
 
 import { createInterface } from "readline";
+import { readFile } from "fs/promises";
 import { reportResourceDifferences, compareAndValidateFlows, setupInstanceComparison } from "./report.js";
 import { createBackup } from "./backup.js";
+import { createContactFlow, createContactFlowModule } from "./connect/operations.js";
 
+import type { ConnectClient, ContactFlowType, ContactFlowSummary, ContactFlowModuleSummary, ContactFlow, ContactFlowModule } from "@aws-sdk/client-connect";
 import type { FlowComparisonResult } from "./report.js";
 
 
@@ -15,6 +18,24 @@ export interface CopyFlowsOptions {
   yes: boolean;
   verbose: boolean;
 }
+
+
+// CAMPAIGN flow type is not supported - requires Outbound Campaigns feature
+// which needs KMS setup, dedicated queues, and special phone numbers.
+// Template: templates/flows/default-campaign-content.json (does not exist)
+// TODO: Add CAMPAIGN support when Outbound Campaigns are enabled in test instance
+// @ts-expect-error - CAMPAIGN type intentionally omitted until needed
+const FLOW_TYPE_TO_TEMPLATE: Record<ContactFlowType, string> = {
+  'CONTACT_FLOW': 'templates/flows/default-inbound-content.json',
+  'CUSTOMER_QUEUE': 'templates/flows/default-customer-queue-content.json',
+  'CUSTOMER_HOLD': 'templates/flows/default-customer-hold-content.json',
+  'CUSTOMER_WHISPER': 'templates/flows/default-customer-whisper-content.json',
+  'AGENT_HOLD': 'templates/flows/default-agent-hold-content.json',
+  'AGENT_WHISPER': 'templates/flows/default-agent-whisper-content.json',
+  'OUTBOUND_WHISPER': 'templates/flows/default-outbound-content.json',
+  'AGENT_TRANSFER': 'templates/flows/default-agent-transfer-content.json',
+  'QUEUE_TRANSFER': 'templates/flows/default-queue-transfer-content.json'
+};
 
 
 async function promptContinue(message: string): Promise<boolean> {
@@ -44,6 +65,75 @@ async function promptConfirm(message: string): Promise<boolean> {
       resolve(answer.toLowerCase() === 'confirm');
     });
   });
+}
+
+
+async function generateModuleStubContent(): Promise<string> {
+  const templateContent = await readFile('templates/modules/default-module-content.json', 'utf-8');
+  return templateContent;
+}
+
+
+async function generateFlowStubContent(flowType: ContactFlowType): Promise<string> {
+  const templatePath = FLOW_TYPE_TO_TEMPLATE[flowType];
+
+  if (!templatePath) {
+    throw new Error(`Unsupported flow type: ${flowType}`);
+  }
+
+  const templateContent = await readFile(templatePath, 'utf-8');
+  return templateContent;
+}
+
+
+async function createStubResources(targetClient: ConnectClient, targetInstanceId: string, modulesToCreate: ContactFlowModuleSummary[], flowsToCreate: ContactFlowSummary[], sourceModuleDetails: Map<string, ContactFlowModule>, sourceFlowDetails: Map<string, ContactFlow>): Promise<Map<string, string>> {
+  const arnMapping = new Map<string, string>();
+
+  console.log("\nPass 1: Creating stub resources...");
+
+  for (const moduleSummary of modulesToCreate) {
+    const sourceModule = sourceModuleDetails.get(moduleSummary.Id!);
+    if (!sourceModule) continue;
+
+    const stubContent = await generateModuleStubContent();
+
+    const result = await createContactFlowModule(
+      targetClient,
+      targetInstanceId,
+      sourceModule.Name!,
+      stubContent,
+      sourceModule.Description,
+      sourceModule.Tags
+    );
+
+    arnMapping.set(sourceModule.Arn!, result.arn);
+    console.log(`  Created stub module: ${sourceModule.Name}`);
+  }
+
+  for (const flowSummary of flowsToCreate) {
+    const sourceFlow = sourceFlowDetails.get(flowSummary.Id!);
+    if (!sourceFlow) continue;
+
+    const stubContent = await generateFlowStubContent(sourceFlow.Type!);
+
+    const result = await createContactFlow(
+      targetClient,
+      targetInstanceId,
+      sourceFlow.Name!,
+      stubContent,
+      sourceFlow.Type!,
+      sourceFlow.Description,
+      sourceFlow.Tags,
+      "SAVED"
+    );
+
+    arnMapping.set(sourceFlow.Arn!, result.arn);
+    console.log(`  Created stub flow: ${sourceFlow.Name}`);
+  }
+
+  console.log(`\nCreated ${modulesToCreate.length} modules and ${flowsToCreate.length} flows`);
+
+  return arnMapping;
 }
 
 
@@ -151,6 +241,22 @@ export async function copyFlows(options: CopyFlowsOptions) {
     comparisonResult.modulesToUpdateList
   );
 
-  console.log("TODO: Implement copy execution");
+  const createdArnMappings = await createStubResources(
+    targetClient,
+    targetConfig.instanceId,
+    comparisonResult.modulesToCreateList,
+    comparisonResult.flowsToCreateList,
+    comparisonResult.validationResult.sourceModuleDetails,
+    comparisonResult.validationResult.sourceFlowDetails
+  );
+
+  const completeMappings = new Map([
+    ...comparisonResult.validationResult.resourceMappings.arnMap,
+    ...createdArnMappings
+  ]);
+
+  console.log(`\nComplete ARN mappings: ${completeMappings.size} total (${comparisonResult.validationResult.resourceMappings.arnMap.size} existing + ${createdArnMappings.size} created)`);
+
+  console.log("\nTODO: Implement Pass 2 (update content) and Pass 3 (metadata/publishing)");
 }
 

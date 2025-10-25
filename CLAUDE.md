@@ -179,6 +179,18 @@ Options:
 - Config file supports include/exclude patterns (e.g., `Test_*`, `Draft_*`)
 - Enables selective copying of flows matching specific patterns
 
+## Known Limitations
+
+### CAMPAIGN Flow Type Not Supported
+- CAMPAIGN flow types (used for Amazon Connect Outbound Campaigns) are not currently supported
+- Requires Outbound Campaigns feature which needs:
+  - KMS key setup (AWS managed or customer managed)
+  - Dedicated queues for campaign contacts
+  - Special phone numbers that support outbound campaigns
+  - Additional AWS costs
+- If tool encounters a CAMPAIGN flow, it will fail with error: `Unsupported flow type: CAMPAIGN`
+- To add support: Enable Outbound Campaigns in test instance and create template at `templates/flows/default-campaign-content.json`
+
 GENERAL CODE STYLE:
 - Keep code as simple and short as possible - no unnecessary error handling or unused references
 - Remove try/catch blocks, unused imports, and unnecessary helper functions unless explicitly requested
