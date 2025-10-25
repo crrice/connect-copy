@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from "commander";
+import { setCliFlags } from "./cli-flags.js";
 import { copyFlows } from "./copy-flows.js";
 import { copyViews } from "./copy-views.js";
 import { runReport } from "./report.js";
@@ -22,7 +23,10 @@ program
   .option("--no-publish", "Keep all flows as SAVED regardless of source state")
   .option("-y, --yes", "Auto-confirm all prompts", false)
   .option("--verbose", "Enable detailed logging", false)
-  .action(copyFlows);
+  .action((options) => {
+    setCliFlags({ publish: options.publish, yes: options.yes, verbose: options.verbose });
+    copyFlows(options);
+  });
 
 program
   .command("report")
@@ -33,7 +37,10 @@ program
   .requiredOption("--target-profile <profile>", "AWS profile for target account")
   .option("--resources-only", "Only report resource differences, skip flow validation", false)
   .option("--verbose", "Enable detailed logging", false)
-  .action(runReport);
+  .action((options) => {
+    setCliFlags({ publish: true, yes: false, verbose: options.verbose });
+    runReport(options);
+  });
 
 program
   .command("copy-views")
@@ -44,7 +51,10 @@ program
   .requiredOption("--target-profile <profile>", "AWS profile for target account")
   .option("--include-aws-managed", "Include AWS managed views", false)
   .option("--verbose", "Enable detailed logging", false)
-  .action(copyViews);
+  .action((options) => {
+    setCliFlags({ publish: true, yes: false, verbose: options.verbose });
+    copyViews(options);
+  });
 
 program.parse();
 

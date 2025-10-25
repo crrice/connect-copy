@@ -1,9 +1,10 @@
 
 import { createInterface } from "readline";
 import { readFile } from "fs/promises";
+import { cliFlags } from "./cli-flags.js";
 import { reportResourceDifferences, compareAndValidateFlows, setupInstanceComparison } from "./report.js";
 import { createBackup } from "./backup.js";
-import { createContactFlow, createContactFlowModule, updateContactFlowModuleContent } from "./connect/operations.js";
+import { createContactFlow, createContactFlowModule, updateContactFlowModuleContent, updateContactFlowContent } from "./connect/operations.js";
 import { replaceArnsInContent } from "./arn-replacement.js";
 
 import type { ConnectClient, ContactFlowType, ContactFlowSummary, ContactFlowModuleSummary, ContactFlow, ContactFlowModule } from "@aws-sdk/client-connect";
@@ -15,9 +16,6 @@ export interface CopyFlowsOptions {
   targetConfig: string;
   sourceProfile: string;
   targetProfile: string;
-  publish: boolean;
-  yes: boolean;
-  verbose: boolean;
 }
 
 
@@ -138,7 +136,7 @@ async function createStubResources(targetClient: ConnectClient, targetInstanceId
 }
 
 
-async function updateModuleContents(targetClient: ConnectClient, targetInstanceId: string, modulesToCreate: ContactFlowModuleSummary[], modulesToUpdate: ContactFlowModuleSummary[], sourceModuleDetails: Map<string, ContactFlowModule>, targetModuleSummaries: ContactFlowModuleSummary[], createdArnMappings: Map<string, string>, completeMappings: Map<string, string>) {
+async function updateModuleContents(targetClient: ConnectClient, targetInstanceId: string, modulesToCreate: ContactFlowModuleSummary[], modulesToUpdate: ContactFlowModuleSummary[], sourceModuleDetails: Map<string, ContactFlowModule>, createdArnMappings: Map<string, string>, completeMappings: Map<string, string>) {
   console.log("\nPass 2: Updating module content...");
 
   for (const moduleSummary of modulesToCreate) {
@@ -161,19 +159,17 @@ async function updateModuleContents(targetClient: ConnectClient, targetInstanceI
     console.log(`  Updated content for created module: ${sourceModule.Name}`);
   }
 
-  for (const moduleSummary of modulesToUpdate) {
-    const sourceModule = sourceModuleDetails.get(moduleSummary.Id!);
+  for (const targetModuleSummary of modulesToUpdate) {
+    const moduleName = targetModuleSummary.Name!;
+    const sourceModule = Array.from(sourceModuleDetails.values()).find(m => m.Name === moduleName);
     if (!sourceModule) continue;
 
     const updatedContent = replaceArnsInContent(sourceModule.Content!, completeMappings);
 
-    const targetModule = targetModuleSummaries.find(m => m.Name === sourceModule.Name);
-    if (!targetModule) continue;
-
     await updateContactFlowModuleContent(
       targetClient,
       targetInstanceId,
-      targetModule.Id!,
+      targetModuleSummary.Id!,
       updatedContent
     );
 
@@ -181,6 +177,54 @@ async function updateModuleContents(targetClient: ConnectClient, targetInstanceI
   }
 
   console.log(`\nUpdated ${modulesToCreate.length + modulesToUpdate.length} modules`);
+}
+
+
+async function updateFlowContents(targetClient: ConnectClient, targetInstanceId: string, flowsToCreate: ContactFlowSummary[], flowsToUpdate: ContactFlowSummary[], sourceFlowDetails: Map<string, ContactFlow>, createdArnMappings: Map<string, string>, completeMappings: Map<string, string>) {
+  console.log("\nPass 2: Updating flow content...");
+
+  for (const flowSummary of flowsToCreate) {
+    const sourceFlow = sourceFlowDetails.get(flowSummary.Id!);
+    if (!sourceFlow) continue;
+
+    const updatedContent = replaceArnsInContent(sourceFlow.Content!, completeMappings);
+    const targetArn = createdArnMappings.get(sourceFlow.Arn!);
+    if (!targetArn) continue;
+
+    const targetFlowId = targetArn.split('/').pop()!;
+    const shouldPublish = sourceFlow.Status === "PUBLISHED" && cliFlags.publish;
+    const flowIdToUpdate = shouldPublish ? targetFlowId : targetFlowId + ':$SAVED';
+
+    await updateContactFlowContent(
+      targetClient,
+      targetInstanceId,
+      flowIdToUpdate,
+      updatedContent
+    );
+
+    console.log(`  Updated content for created flow: ${sourceFlow.Name}`);
+  }
+
+  for (const targetFlowSummary of flowsToUpdate) {
+    const flowName = targetFlowSummary.Name!;
+    const sourceFlow = Array.from(sourceFlowDetails.values()).find(f => f.Name === flowName);
+    if (!sourceFlow) continue;
+
+    const updatedContent = replaceArnsInContent(sourceFlow.Content!, completeMappings);
+    const shouldPublish = sourceFlow.Status === "PUBLISHED" && cliFlags.publish;
+    const flowIdToUpdate = shouldPublish ? targetFlowSummary.Id! : targetFlowSummary.Id! + ':$SAVED';
+
+    await updateContactFlowContent(
+      targetClient,
+      targetInstanceId,
+      flowIdToUpdate,
+      updatedContent
+    );
+
+    console.log(`  Updated content for existing flow: ${sourceFlow.Name}`);
+  }
+
+  console.log(`\nUpdated ${flowsToCreate.length + flowsToUpdate.length} flows`);
 }
 
 
@@ -240,7 +284,7 @@ export async function copyFlows(options: CopyFlowsOptions) {
 
   const hasMissingResources = reportResourceDifferences(sourceInventory, targetInventory);
 
-  if (hasMissingResources && !options.yes) {
+  if (hasMissingResources && !cliFlags.yes) {
     const shouldContinue = await promptContinue("Continue to flow validation?");
     if (!shouldContinue) {
       console.log("Validation cancelled by user");
@@ -254,8 +298,7 @@ export async function copyFlows(options: CopyFlowsOptions) {
     sourceConfig,
     targetConfig,
     sourceInventory,
-    targetInventory,
-    options.verbose
+    targetInventory
   );
 
   if (!comparisonResult.valid) {
@@ -269,7 +312,7 @@ export async function copyFlows(options: CopyFlowsOptions) {
 
   displayCopyPlan(comparisonResult);
 
-  if (!options.yes) {
+  if (!cliFlags.yes) {
     const shouldProceed = await promptConfirm("Proceed with copy? This will create/update flows in the target instance.");
     if (!shouldProceed) {
       console.log("Copy cancelled by user");
@@ -310,11 +353,20 @@ export async function copyFlows(options: CopyFlowsOptions) {
     comparisonResult.modulesToCreateList,
     comparisonResult.modulesToUpdateList,
     comparisonResult.validationResult.sourceModuleDetails,
-    targetInventory.modules,
     createdArnMappings,
     completeMappings
   );
 
-  console.log("\nTODO: Implement Pass 2 for flows and Pass 3 (metadata/publishing)");
+  await updateFlowContents(
+    targetClient,
+    targetConfig.instanceId,
+    comparisonResult.flowsToCreateList,
+    comparisonResult.flowsToUpdateList,
+    comparisonResult.validationResult.sourceFlowDetails,
+    createdArnMappings,
+    completeMappings
+  );
+
+  console.log("\nCopy complete!");
 }
 

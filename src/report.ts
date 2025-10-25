@@ -1,6 +1,7 @@
 
 import { readFile } from "fs/promises";
 import type { ConnectClient, ContactFlow, ContactFlowModule, ContactFlowSummary, ContactFlowModuleSummary } from "@aws-sdk/client-connect";
+import { cliFlags } from "./cli-flags.js";
 import { createConnectClient } from "./connect/client.js";
 import { gatherFlowInventory, describeContactFlow, describeContactFlowModule } from "./connect/flows.js";
 import { gatherResourceInventory } from "./connect/resources.js";
@@ -18,7 +19,6 @@ export interface ReportOptions {
   sourceProfile: string;
   targetProfile: string;
   resourcesOnly: boolean;
-  verbose: boolean;
 }
 
 
@@ -110,7 +110,7 @@ function tagsEqual(tags1?: Record<string, string>, tags2?: Record<string, string
 }
 
 
-function moduleContentsEqual(sourceContent: string, targetContent: string, arnMappings: Map<string, string>): boolean {
+function jsonSemanticallyEqual(sourceContent: string, targetContent: string, arnMappings: Map<string, string>): boolean {
   const normalizedSourceContent = replaceArnsInContent(sourceContent, arnMappings);
 
   const sourceObj = JSON.parse(normalizedSourceContent);
@@ -123,14 +123,14 @@ function moduleContentsEqual(sourceContent: string, targetContent: string, arnMa
 }
 
 
-export async function compareAndValidateFlows(sourceClient: any, targetClient: any, sourceConfig: ConnectConfig, targetConfig: ConnectConfig, sourceInventory: InstanceInventory, targetInventory: InstanceInventory, verbose: boolean): Promise<FlowComparisonResult> {
+export async function compareAndValidateFlows(sourceClient: any, targetClient: any, sourceConfig: ConnectConfig, targetConfig: ConnectConfig, sourceInventory: InstanceInventory, targetInventory: InstanceInventory): Promise<FlowComparisonResult> {
     console.log("\n" + "=".repeat(50));
     console.log("Flow Content Comparison");
     console.log("=".repeat(50) + "\n");
 
     console.log("Applying filters...");
 
-    if (verbose) {
+    if (cliFlags.verbose) {
       if (sourceConfig.flowFilters) {
         console.log("  Flow filters:");
         console.log(`    Include: ${JSON.stringify(sourceConfig.flowFilters.include ?? ["*"])}`);
@@ -156,7 +156,7 @@ export async function compareAndValidateFlows(sourceClient: any, targetClient: a
       matchesFlowFilters(module.Name ?? "", sourceConfig.moduleFilters)
     );
 
-    if (verbose) {
+    if (cliFlags.verbose) {
       const excludedFlows = sourceInventory.flows.filter(flow => !matchesFlowFilters(flow.Name ?? "", sourceConfig.flowFilters));
 
       if (excludedFlows.length > 0) {
@@ -208,7 +208,7 @@ export async function compareAndValidateFlows(sourceClient: any, targetClient: a
         sourceFlowDetails.set(flowSummary.Id!, sourceFlowFull);
         flowsToValidate.push(flowSummary);
         flowsToCreateList.push(flowSummary);
-        if (verbose) {
+        if (cliFlags.verbose) {
           console.log(`  ${flowName}: Create (does not exist in target)`);
         }
         continue;
@@ -216,24 +216,26 @@ export async function compareAndValidateFlows(sourceClient: any, targetClient: a
 
       const targetFlowFull = await describeContactFlow(targetClient, targetConfig.instanceId, targetFlow.Id!);
 
-      const contentDiffers = sourceFlowFull.Content !== targetFlowFull.Content;
+      const contentDiffers = !jsonSemanticallyEqual(sourceFlowFull.Content!, targetFlowFull.Content!, arnMap);
       const descriptionDiffers = sourceFlowFull.Description !== targetFlowFull.Description;
       const tagsDiffer = !tagsEqual(sourceFlowFull.Tags, targetFlowFull.Tags);
+      const statusDiffers = sourceFlowFull.Status === "PUBLISHED" && targetFlowFull.Status === "SAVED" && cliFlags.publish;
 
-      if (contentDiffers || descriptionDiffers || tagsDiffer) {
+      if (contentDiffers || descriptionDiffers || tagsDiffer || statusDiffers) {
         sourceFlowDetails.set(flowSummary.Id!, sourceFlowFull);
         flowsToValidate.push(flowSummary);
         flowsToUpdateList.push(targetFlow);
-        if (verbose) {
+        if (cliFlags.verbose) {
           const reasons = [];
           if (contentDiffers) reasons.push("content");
           if (descriptionDiffers) reasons.push("description");
           if (tagsDiffer) reasons.push("tags");
+          if (statusDiffers) reasons.push("status");
           console.log(`  ${flowName}: Update (${reasons.join(", ")} differs)`);
         }
       } else {
         flowsToSkipList.push(targetFlow);
-        if (verbose) {
+        if (cliFlags.verbose) {
           console.log(`  ${flowName}: Skip (content matches)`);
         }
       }
@@ -252,7 +254,7 @@ export async function compareAndValidateFlows(sourceClient: any, targetClient: a
         sourceModuleDetails.set(moduleSummary.Id!, sourceModuleFull);
         modulesToValidate.push(moduleSummary);
         modulesToCreateList.push(moduleSummary);
-        if (verbose) {
+        if (cliFlags.verbose) {
           console.log(`  ${moduleName}: Create (does not exist in target)`);
         }
         continue;
@@ -260,7 +262,7 @@ export async function compareAndValidateFlows(sourceClient: any, targetClient: a
 
       const targetModuleFull = await describeContactFlowModule(targetClient, targetConfig.instanceId, targetModule.Id!);
 
-      const contentDiffers = !moduleContentsEqual(sourceModuleFull.Content!, targetModuleFull.Content!, arnMap);
+      const contentDiffers = !jsonSemanticallyEqual(sourceModuleFull.Content!, targetModuleFull.Content!, arnMap);
       const descriptionDiffers = sourceModuleFull.Description !== targetModuleFull.Description;
       const tagsDiffer = !tagsEqual(sourceModuleFull.Tags, targetModuleFull.Tags);
 
@@ -268,7 +270,7 @@ export async function compareAndValidateFlows(sourceClient: any, targetClient: a
         sourceModuleDetails.set(moduleSummary.Id!, sourceModuleFull);
         modulesToValidate.push(moduleSummary);
         modulesToUpdateList.push(targetModule);
-        if (verbose) {
+        if (cliFlags.verbose) {
           const reasons = [];
           if (contentDiffers) reasons.push("content");
           if (descriptionDiffers) reasons.push("description");
@@ -277,7 +279,7 @@ export async function compareAndValidateFlows(sourceClient: any, targetClient: a
         }
       } else {
         modulesToSkipList.push(targetModule);
-        if (verbose) {
+        if (cliFlags.verbose) {
           console.log(`  ${moduleName}: Skip (content matches)`);
         }
       }
@@ -298,7 +300,7 @@ export async function compareAndValidateFlows(sourceClient: any, targetClient: a
       modulesToValidate,
       sourceFlowDetails,
       sourceModuleDetails,
-      verbose
+      cliFlags.verbose
     );
 
     displayValidationReport(validationResult);
@@ -327,7 +329,7 @@ export async function runReport(options: ReportOptions) {
   reportResourceDifferences(sourceInventory, targetInventory);
 
   if (!options.resourcesOnly) {
-    await compareAndValidateFlows(sourceClient, targetClient, sourceConfig, targetConfig, sourceInventory, targetInventory, options.verbose);
+    await compareAndValidateFlows(sourceClient, targetClient, sourceConfig, targetConfig, sourceInventory, targetInventory);
   }
 }
 
