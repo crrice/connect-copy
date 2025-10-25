@@ -7,6 +7,7 @@ import { gatherResourceInventory } from "./connect/resources.js";
 import { buildAllResourceMappings } from "./mapping.js";
 import { matchesFlowFilters, matchesFlowFiltersWithReason } from "./filters.js";
 import { validateFlowDependencies } from "./validation.js";
+import { replaceArnsInContent } from "./arn-replacement.js";
 import type { ConnectConfig, ValidationResult } from "./validation.js";
 import type { InstanceInventory } from "./mapping.js";
 
@@ -109,6 +110,19 @@ function tagsEqual(tags1?: Record<string, string>, tags2?: Record<string, string
 }
 
 
+function moduleContentsEqual(sourceContent: string, targetContent: string, arnMappings: Map<string, string>): boolean {
+  const normalizedSourceContent = replaceArnsInContent(sourceContent, arnMappings);
+
+  const sourceObj = JSON.parse(normalizedSourceContent);
+  const targetObj = JSON.parse(targetContent);
+
+  const sourceNormalized = JSON.stringify(sourceObj);
+  const targetNormalized = JSON.stringify(targetObj);
+
+  return sourceNormalized === targetNormalized;
+}
+
+
 export async function compareAndValidateFlows(sourceClient: any, targetClient: any, sourceConfig: ConnectConfig, targetConfig: ConnectConfig, sourceInventory: InstanceInventory, targetInventory: InstanceInventory, verbose: boolean): Promise<FlowComparisonResult> {
     console.log("\n" + "=".repeat(50));
     console.log("Flow Content Comparison");
@@ -178,6 +192,9 @@ export async function compareAndValidateFlows(sourceClient: any, targetClient: a
     const flowsToValidate: ContactFlowSummary[] = [];
     const modulesToValidate: ContactFlowModuleSummary[] = [];
 
+    const resourceMappings = buildAllResourceMappings(sourceInventory, targetInventory);
+    const arnMap = resourceMappings.arnMap;
+
     const flowsToCreateList: ContactFlowSummary[] = [];
     const flowsToUpdateList: ContactFlowSummary[] = [];
     const flowsToSkipList: ContactFlowSummary[] = [];
@@ -243,7 +260,7 @@ export async function compareAndValidateFlows(sourceClient: any, targetClient: a
 
       const targetModuleFull = await describeContactFlowModule(targetClient, targetConfig.instanceId, targetModule.Id!);
 
-      const contentDiffers = sourceModuleFull.Content !== targetModuleFull.Content;
+      const contentDiffers = !moduleContentsEqual(sourceModuleFull.Content!, targetModuleFull.Content!, arnMap);
       const descriptionDiffers = sourceModuleFull.Description !== targetModuleFull.Description;
       const tagsDiffer = !tagsEqual(sourceModuleFull.Tags, targetModuleFull.Tags);
 

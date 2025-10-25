@@ -3,7 +3,8 @@ import { createInterface } from "readline";
 import { readFile } from "fs/promises";
 import { reportResourceDifferences, compareAndValidateFlows, setupInstanceComparison } from "./report.js";
 import { createBackup } from "./backup.js";
-import { createContactFlow, createContactFlowModule } from "./connect/operations.js";
+import { createContactFlow, createContactFlowModule, updateContactFlowModuleContent } from "./connect/operations.js";
+import { replaceArnsInContent } from "./arn-replacement.js";
 
 import type { ConnectClient, ContactFlowType, ContactFlowSummary, ContactFlowModuleSummary, ContactFlow, ContactFlowModule } from "@aws-sdk/client-connect";
 import type { FlowComparisonResult } from "./report.js";
@@ -137,6 +138,52 @@ async function createStubResources(targetClient: ConnectClient, targetInstanceId
 }
 
 
+async function updateModuleContents(targetClient: ConnectClient, targetInstanceId: string, modulesToCreate: ContactFlowModuleSummary[], modulesToUpdate: ContactFlowModuleSummary[], sourceModuleDetails: Map<string, ContactFlowModule>, targetModuleSummaries: ContactFlowModuleSummary[], createdArnMappings: Map<string, string>, completeMappings: Map<string, string>) {
+  console.log("\nPass 2: Updating module content...");
+
+  for (const moduleSummary of modulesToCreate) {
+    const sourceModule = sourceModuleDetails.get(moduleSummary.Id!);
+    if (!sourceModule) continue;
+
+    const updatedContent = replaceArnsInContent(sourceModule.Content!, completeMappings);
+    const targetArn = createdArnMappings.get(sourceModule.Arn!);
+    if (!targetArn) continue;
+
+    const targetModuleId = targetArn.split('/').pop()!;
+
+    await updateContactFlowModuleContent(
+      targetClient,
+      targetInstanceId,
+      targetModuleId,
+      updatedContent
+    );
+
+    console.log(`  Updated content for created module: ${sourceModule.Name}`);
+  }
+
+  for (const moduleSummary of modulesToUpdate) {
+    const sourceModule = sourceModuleDetails.get(moduleSummary.Id!);
+    if (!sourceModule) continue;
+
+    const updatedContent = replaceArnsInContent(sourceModule.Content!, completeMappings);
+
+    const targetModule = targetModuleSummaries.find(m => m.Name === sourceModule.Name);
+    if (!targetModule) continue;
+
+    await updateContactFlowModuleContent(
+      targetClient,
+      targetInstanceId,
+      targetModule.Id!,
+      updatedContent
+    );
+
+    console.log(`  Updated content for existing module: ${sourceModule.Name}`);
+  }
+
+  console.log(`\nUpdated ${modulesToCreate.length + modulesToUpdate.length} modules`);
+}
+
+
 function displayCopyPlan(comparisonResult: FlowComparisonResult) {
   console.log("\n" + "=".repeat(50));
   console.log("Copy Plan");
@@ -257,6 +304,17 @@ export async function copyFlows(options: CopyFlowsOptions) {
 
   console.log(`\nComplete ARN mappings: ${completeMappings.size} total (${comparisonResult.validationResult.resourceMappings.arnMap.size} existing + ${createdArnMappings.size} created)`);
 
-  console.log("\nTODO: Implement Pass 2 (update content) and Pass 3 (metadata/publishing)");
+  await updateModuleContents(
+    targetClient,
+    targetConfig.instanceId,
+    comparisonResult.modulesToCreateList,
+    comparisonResult.modulesToUpdateList,
+    comparisonResult.validationResult.sourceModuleDetails,
+    targetInventory.modules,
+    createdArnMappings,
+    completeMappings
+  );
+
+  console.log("\nTODO: Implement Pass 2 for flows and Pass 3 (metadata/publishing)");
 }
 
