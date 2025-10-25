@@ -92,6 +92,23 @@ export async function setupInstanceComparison(sourceConfigPath: string, targetCo
 }
 
 
+function tagsEqual(tags1?: Record<string, string>, tags2?: Record<string, string>): boolean {
+  const t1 = tags1 ?? {};
+  const t2 = tags2 ?? {};
+
+  const keys1 = Object.keys(t1);
+  const keys2 = Object.keys(t2);
+
+  if (keys1.length !== keys2.length) return false;
+
+  for (const key of keys1) {
+    if (t1[key] !== t2[key]) return false;
+  }
+
+  return true;
+}
+
+
 export async function compareAndValidateFlows(sourceClient: any, targetClient: any, sourceConfig: ConnectConfig, targetConfig: ConnectConfig, sourceInventory: InstanceInventory, targetInventory: InstanceInventory, verbose: boolean): Promise<FlowComparisonResult> {
     console.log("\n" + "=".repeat(50));
     console.log("Flow Content Comparison");
@@ -182,15 +199,23 @@ export async function compareAndValidateFlows(sourceClient: any, targetClient: a
 
       const targetFlowFull = await describeContactFlow(targetClient, targetConfig.instanceId, targetFlow.Id!);
 
-      if (sourceFlowFull.Content !== targetFlowFull.Content) {
+      const contentDiffers = sourceFlowFull.Content !== targetFlowFull.Content;
+      const descriptionDiffers = sourceFlowFull.Description !== targetFlowFull.Description;
+      const tagsDiffer = !tagsEqual(sourceFlowFull.Tags, targetFlowFull.Tags);
+
+      if (contentDiffers || descriptionDiffers || tagsDiffer) {
         sourceFlowDetails.set(flowSummary.Id!, sourceFlowFull);
         flowsToValidate.push(flowSummary);
-        flowsToUpdateList.push(flowSummary);
+        flowsToUpdateList.push(targetFlow);
         if (verbose) {
-          console.log(`  ${flowName}: Update (content differs)`);
+          const reasons = [];
+          if (contentDiffers) reasons.push("content");
+          if (descriptionDiffers) reasons.push("description");
+          if (tagsDiffer) reasons.push("tags");
+          console.log(`  ${flowName}: Update (${reasons.join(", ")} differs)`);
         }
       } else {
-        flowsToSkipList.push(flowSummary);
+        flowsToSkipList.push(targetFlow);
         if (verbose) {
           console.log(`  ${flowName}: Skip (content matches)`);
         }
@@ -218,15 +243,23 @@ export async function compareAndValidateFlows(sourceClient: any, targetClient: a
 
       const targetModuleFull = await describeContactFlowModule(targetClient, targetConfig.instanceId, targetModule.Id!);
 
-      if (sourceModuleFull.Content !== targetModuleFull.Content) {
+      const contentDiffers = sourceModuleFull.Content !== targetModuleFull.Content;
+      const descriptionDiffers = sourceModuleFull.Description !== targetModuleFull.Description;
+      const tagsDiffer = !tagsEqual(sourceModuleFull.Tags, targetModuleFull.Tags);
+
+      if (contentDiffers || descriptionDiffers || tagsDiffer) {
         sourceModuleDetails.set(moduleSummary.Id!, sourceModuleFull);
         modulesToValidate.push(moduleSummary);
-        modulesToUpdateList.push(moduleSummary);
+        modulesToUpdateList.push(targetModule);
         if (verbose) {
-          console.log(`  ${moduleName}: Update (content differs)`);
+          const reasons = [];
+          if (contentDiffers) reasons.push("content");
+          if (descriptionDiffers) reasons.push("description");
+          if (tagsDiffer) reasons.push("tags");
+          console.log(`  ${moduleName}: Update (${reasons.join(", ")} differs)`);
         }
       } else {
-        modulesToSkipList.push(moduleSummary);
+        modulesToSkipList.push(targetModule);
         if (verbose) {
           console.log(`  ${moduleName}: Skip (content matches)`);
         }
