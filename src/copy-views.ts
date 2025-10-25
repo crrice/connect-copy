@@ -92,10 +92,20 @@ export async function copyViews(options: CopyViewsOptions) {
   const sourceConfig: ConnectConfig = JSON.parse(sourceConfigData);
   const targetConfig: ConnectConfig = JSON.parse(targetConfigData);
 
+  console.log("Source: " + options.sourceConfig);
+  console.log(`  Instance ID: ${sourceConfig.instanceId}`);
+  console.log(`  Region: ${sourceConfig.region}`);
+  console.log(`  Profile: ${options.sourceProfile}`);
+
+  console.log("\nTarget: " + options.targetConfig);
+  console.log(`  Instance ID: ${targetConfig.instanceId}`);
+  console.log(`  Region: ${targetConfig.region}`);
+  console.log(`  Profile: ${options.targetProfile}`);
+
   const sourceClient = createConnectClient(sourceConfig.region, options.sourceProfile);
   const targetClient = createConnectClient(targetConfig.region, options.targetProfile);
 
-  console.log("Gathering view inventories...");
+  console.log("\nGathering view inventories...");
 
   const sourceViews = await listViews(sourceClient, sourceConfig.instanceId);
   const targetViews = await listViews(targetClient, targetConfig.instanceId);

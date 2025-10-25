@@ -1,6 +1,6 @@
 
 import type { ContactFlowSummary, ContactFlowModuleSummary, ContactFlow, ContactFlowModule } from "@aws-sdk/client-connect";
-import { extractDependencyArnsFromFlow } from "./arn-utils.js";
+import { extractDependencyArnsFromFlow, categorizeArn } from "./arn-utils.js";
 import { buildAllResourceMappings, validateDependencies } from "./mapping.js";
 import type { InstanceInventory, ResourceMappings } from "./mapping.js";
 
@@ -56,6 +56,49 @@ export interface ValidationResult {
 }
 
 
+function getResourceNameFromArn(arn: string, inventory: InstanceInventory): string | undefined {
+  const allResources = [
+    ...inventory.flows,
+    ...inventory.modules,
+    ...inventory.queues,
+    ...inventory.prompts,
+    ...inventory.routingProfiles,
+    ...inventory.hoursOfOperations,
+    ...inventory.quickConnects,
+    ...inventory.securityProfiles,
+    ...inventory.hierarchyGroups,
+    ...inventory.agentStatuses,
+    ...inventory.views
+  ];
+
+  const resource = allResources.find(r => r.Arn === arn);
+  return resource?.Name;
+}
+
+
+function formatArnCategoryName(category: string): string {
+  const categoryMap: Record<string, string> = {
+    'flow': 'Flow',
+    'module': 'Module',
+    'queue': 'Queue',
+    'prompt': 'Prompt',
+    'lambda': 'Lambda',
+    'lex': 'Lex Bot',
+    's3': 'S3 Bucket',
+    'view': 'View',
+    'routing-profile': 'Routing Profile',
+    'hours-of-operation': 'Hours of Operation',
+    'quick-connect': 'Quick Connect',
+    'security-profile': 'Security Profile',
+    'hierarchy-group': 'Hierarchy Group',
+    'agent-status': 'Agent Status',
+    'unknown': 'Unknown'
+  };
+
+  return categoryMap[category] || category;
+}
+
+
 export function validateFlowDependencies(sourceInventory: InstanceInventory, targetInventory: InstanceInventory, sourceFlowsToCopy: ContactFlowSummary[], sourceModulesToCopy: ContactFlowModuleSummary[], sourceFlowDetails: Map<string, ContactFlow>, sourceModuleDetails: Map<string, ContactFlowModule>, verbose: boolean): ValidationResult {
   console.log("Validating dependencies...");
 
@@ -91,6 +134,12 @@ export function validateFlowDependencies(sourceInventory: InstanceInventory, tar
 
     if (verbose) {
       console.log(`Flow "${fullFlow.Name}": ${arns.length} dependencies`);
+      for (const arn of arns) {
+        const category = categorizeArn(arn);
+        const resourceName = getResourceNameFromArn(arn, sourceInventory);
+        const displayName = resourceName ? `"${resourceName}"` : arn;
+        console.log(`  - ${formatArnCategoryName(category)}: ${displayName}`);
+      }
     }
 
     const validation = validateDependencies(arns, resourceMappings, flowsWillCreate, modulesWillCreate, targetFlowsByArn, targetModulesByArn, fullFlow.Name!);
@@ -106,6 +155,12 @@ export function validateFlowDependencies(sourceInventory: InstanceInventory, tar
 
     if (verbose) {
       console.log(`Module "${fullModule.Name}": ${arns.length} dependencies`);
+      for (const arn of arns) {
+        const category = categorizeArn(arn);
+        const resourceName = getResourceNameFromArn(arn, sourceInventory);
+        const displayName = resourceName ? `"${resourceName}"` : arn;
+        console.log(`  - ${formatArnCategoryName(category)}: ${displayName}`);
+      }
     }
 
     const validation = validateDependencies(arns, resourceMappings, flowsWillCreate, modulesWillCreate, targetFlowsByArn, targetModulesByArn, fullModule.Name!);

@@ -5,7 +5,7 @@ import { createConnectClient } from "./connect/client.js";
 import { gatherFlowInventory, describeContactFlow, describeContactFlowModule } from "./connect/flows.js";
 import { gatherResourceInventory } from "./connect/resources.js";
 import { buildAllResourceMappings } from "./mapping.js";
-import { matchesFlowFilters } from "./filters.js";
+import { matchesFlowFilters, matchesFlowFiltersWithReason } from "./filters.js";
 import { validateFlowDependencies } from "./validation.js";
 import type { ConnectConfig, ValidationResult } from "./validation.js";
 import type { InstanceInventory } from "./mapping.js";
@@ -23,12 +23,12 @@ export interface ReportOptions {
 
 export interface FlowComparisonResult {
   valid: boolean;
-  flowsToCreate: number;
-  flowsToUpdate: number;
-  flowsToSkip: number;
-  modulesToCreate: number;
-  modulesToUpdate: number;
-  modulesToSkip: number;
+  flowsToCreateList: ContactFlowSummary[];
+  flowsToUpdateList: ContactFlowSummary[];
+  flowsToSkipList: ContactFlowSummary[];
+  modulesToCreateList: ContactFlowModuleSummary[];
+  modulesToUpdateList: ContactFlowModuleSummary[];
+  modulesToSkipList: ContactFlowModuleSummary[];
   validationResult: ValidationResult;
 }
 
@@ -50,10 +50,20 @@ export async function setupInstanceComparison(sourceConfigPath: string, targetCo
   const sourceConfig: ConnectConfig = JSON.parse(sourceConfigData);
   const targetConfig: ConnectConfig = JSON.parse(targetConfigData);
 
+  console.log("Source: " + sourceConfigPath);
+  console.log(`  Instance ID: ${sourceConfig.instanceId}`);
+  console.log(`  Region: ${sourceConfig.region}`);
+  console.log(`  Profile: ${sourceProfile}`);
+
+  console.log("\nTarget: " + targetConfigPath);
+  console.log(`  Instance ID: ${targetConfig.instanceId}`);
+  console.log(`  Region: ${targetConfig.region}`);
+  console.log(`  Profile: ${targetProfile}`);
+
   const sourceClient = createConnectClient(sourceConfig.region, sourceProfile);
   const targetClient = createConnectClient(targetConfig.region, targetProfile);
 
-  console.log("Gathering resource inventories...");
+  console.log("\nGathering resource inventories...");
 
   const sourceFlows = await gatherFlowInventory(sourceClient, sourceConfig.instanceId);
   const sourceResources = await gatherResourceInventory(sourceClient, sourceConfig.instanceId);
@@ -89,6 +99,24 @@ export async function compareAndValidateFlows(sourceClient: any, targetClient: a
 
     console.log("Applying filters...");
 
+    if (verbose) {
+      if (sourceConfig.flowFilters) {
+        console.log("  Flow filters:");
+        console.log(`    Include: ${JSON.stringify(sourceConfig.flowFilters.include ?? ["*"])}`);
+        console.log(`    Exclude: ${JSON.stringify(sourceConfig.flowFilters.exclude ?? [])}`);
+      } else {
+        console.log("  Flow filters: none (include all)");
+      }
+
+      if (sourceConfig.moduleFilters) {
+        console.log("  Module filters:");
+        console.log(`    Include: ${JSON.stringify(sourceConfig.moduleFilters.include ?? ["*"])}`);
+        console.log(`    Exclude: ${JSON.stringify(sourceConfig.moduleFilters.exclude ?? [])}`);
+      } else {
+        console.log("  Module filters: none (include all)");
+      }
+    }
+
     const sourceFlowsToCopy = sourceInventory.flows.filter(flow =>
       matchesFlowFilters(flow.Name ?? "", sourceConfig.flowFilters)
     );
@@ -96,6 +124,30 @@ export async function compareAndValidateFlows(sourceClient: any, targetClient: a
     const sourceModulesToCopy = sourceInventory.modules.filter(module =>
       matchesFlowFilters(module.Name ?? "", sourceConfig.moduleFilters)
     );
+
+    if (verbose) {
+      const excludedFlows = sourceInventory.flows.filter(flow => !matchesFlowFilters(flow.Name ?? "", sourceConfig.flowFilters));
+
+      if (excludedFlows.length > 0) {
+        console.log(`\nExcluded flows (${excludedFlows.length}):`);
+        for (const flow of excludedFlows) {
+          const result = matchesFlowFiltersWithReason(flow.Name ?? "", sourceConfig.flowFilters);
+          console.log(`  - ${flow.Name} (${result.reason})`);
+        }
+      }
+
+      const excludedModules = sourceInventory.modules.filter(module => !matchesFlowFilters(module.Name ?? "", sourceConfig.moduleFilters));
+
+      if (excludedModules.length > 0) {
+        console.log(`\nExcluded modules (${excludedModules.length}):`);
+        for (const module of excludedModules) {
+          const result = matchesFlowFiltersWithReason(module.Name ?? "", sourceConfig.moduleFilters);
+          console.log(`  - ${module.Name} (${result.reason})`);
+        }
+      }
+
+      console.log();
+    }
 
     console.log(`Filtered: ${sourceFlowsToCopy.length} flows (${sourceInventory.flows.length} total), ${sourceModulesToCopy.length} modules (${sourceInventory.modules.length} total)`);
 
@@ -109,9 +161,9 @@ export async function compareAndValidateFlows(sourceClient: any, targetClient: a
     const flowsToValidate: ContactFlowSummary[] = [];
     const modulesToValidate: ContactFlowModuleSummary[] = [];
 
-    let flowsToCreate = 0;
-    let flowsToUpdate = 0;
-    let flowsToSkip = 0;
+    const flowsToCreateList: ContactFlowSummary[] = [];
+    const flowsToUpdateList: ContactFlowSummary[] = [];
+    const flowsToSkipList: ContactFlowSummary[] = [];
 
     for (const flowSummary of sourceFlowsToCopy) {
       const flowName = flowSummary.Name!;
@@ -121,7 +173,7 @@ export async function compareAndValidateFlows(sourceClient: any, targetClient: a
       if (!targetFlow) {
         sourceFlowDetails.set(flowSummary.Id!, sourceFlowFull);
         flowsToValidate.push(flowSummary);
-        flowsToCreate++;
+        flowsToCreateList.push(flowSummary);
         if (verbose) {
           console.log(`  ${flowName}: Create (does not exist in target)`);
         }
@@ -133,21 +185,21 @@ export async function compareAndValidateFlows(sourceClient: any, targetClient: a
       if (sourceFlowFull.Content !== targetFlowFull.Content) {
         sourceFlowDetails.set(flowSummary.Id!, sourceFlowFull);
         flowsToValidate.push(flowSummary);
-        flowsToUpdate++;
+        flowsToUpdateList.push(flowSummary);
         if (verbose) {
           console.log(`  ${flowName}: Update (content differs)`);
         }
       } else {
-        flowsToSkip++;
+        flowsToSkipList.push(flowSummary);
         if (verbose) {
           console.log(`  ${flowName}: Skip (content matches)`);
         }
       }
     }
 
-    let modulesToCreate = 0;
-    let modulesToUpdate = 0;
-    let modulesToSkip = 0;
+    const modulesToCreateList: ContactFlowModuleSummary[] = [];
+    const modulesToUpdateList: ContactFlowModuleSummary[] = [];
+    const modulesToSkipList: ContactFlowModuleSummary[] = [];
 
     for (const moduleSummary of sourceModulesToCopy) {
       const moduleName = moduleSummary.Name!;
@@ -157,7 +209,7 @@ export async function compareAndValidateFlows(sourceClient: any, targetClient: a
       if (!targetModule) {
         sourceModuleDetails.set(moduleSummary.Id!, sourceModuleFull);
         modulesToValidate.push(moduleSummary);
-        modulesToCreate++;
+        modulesToCreateList.push(moduleSummary);
         if (verbose) {
           console.log(`  ${moduleName}: Create (does not exist in target)`);
         }
@@ -169,12 +221,12 @@ export async function compareAndValidateFlows(sourceClient: any, targetClient: a
       if (sourceModuleFull.Content !== targetModuleFull.Content) {
         sourceModuleDetails.set(moduleSummary.Id!, sourceModuleFull);
         modulesToValidate.push(moduleSummary);
-        modulesToUpdate++;
+        modulesToUpdateList.push(moduleSummary);
         if (verbose) {
           console.log(`  ${moduleName}: Update (content differs)`);
         }
       } else {
-        modulesToSkip++;
+        modulesToSkipList.push(moduleSummary);
         if (verbose) {
           console.log(`  ${moduleName}: Skip (content matches)`);
         }
@@ -182,8 +234,8 @@ export async function compareAndValidateFlows(sourceClient: any, targetClient: a
     }
 
     console.log(`\nComparison summary:`);
-    console.log(`  Flows: ${flowsToCreate} create, ${flowsToUpdate} update, ${flowsToSkip} skip`);
-    console.log(`  Modules: ${modulesToCreate} create, ${modulesToUpdate} update, ${modulesToSkip} skip`);
+    console.log(`  Flows: ${flowsToCreateList.length} create, ${flowsToUpdateList.length} update, ${flowsToSkipList.length} skip`);
+    console.log(`  Modules: ${modulesToCreateList.length} create, ${modulesToUpdateList.length} update, ${modulesToSkipList.length} skip`);
 
     console.log("\n" + "=".repeat(50));
     console.log("Flow Dependency Validation");
@@ -203,12 +255,12 @@ export async function compareAndValidateFlows(sourceClient: any, targetClient: a
 
     return {
       valid: validationResult.valid,
-      flowsToCreate,
-      flowsToUpdate,
-      flowsToSkip,
-      modulesToCreate,
-      modulesToUpdate,
-      modulesToSkip,
+      flowsToCreateList,
+      flowsToUpdateList,
+      flowsToSkipList,
+      modulesToCreateList,
+      modulesToUpdateList,
+      modulesToSkipList,
       validationResult
     };
 }
