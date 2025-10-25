@@ -7,3 +7,4 @@ dist/
 *.tsbuildinfo
 config/
 .claude/settings.local.json
+backups/
