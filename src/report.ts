@@ -200,10 +200,20 @@ export async function compareAndValidateFlows(sourceClient: any, targetClient: a
     const flowsToCreateList: ContactFlowSummary[] = [];
     const flowsToUpdateList: ContactFlowSummary[] = [];
     const flowsToSkipList: ContactFlowSummary[] = [];
+    let flowStatusExcluded = 0;
 
     for (const flowSummary of sourceFlowsToCopy) {
       const flowName = flowSummary.Name!;
       const sourceFlowFull = await describeContactFlow(sourceClient, sourceConfig.instanceId, flowSummary.Id!);
+
+      if (sourceFlowFull.Status !== "PUBLISHED") {
+        flowStatusExcluded++;
+        if (cliFlags.verbose) {
+          console.log(`  ${flowName}: Skip (source Status=${sourceFlowFull.Status}, only PUBLISHED flows are copied)`);
+        }
+        continue;
+      }
+
       const targetFlow = targetFlowsByName.get(flowName);
 
       if (!targetFlow) {
@@ -242,6 +252,10 @@ export async function compareAndValidateFlows(sourceClient: any, targetClient: a
           console.log(`  ${flowName}: Skip (content matches)`);
         }
       }
+    }
+
+    if (flowStatusExcluded > 0) {
+      console.log(`\nExcluded ${flowStatusExcluded} flow${flowStatusExcluded === 1 ? '' : 's'} (source Status≠PUBLISHED)`);
     }
 
     const modulesToCreateList: ContactFlowModuleSummary[] = [];
