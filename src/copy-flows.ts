@@ -4,7 +4,7 @@ import { readFile } from "fs/promises";
 import { cliFlags } from "./cli-flags.js";
 import { reportResourceDifferences, compareAndValidateFlows, setupInstanceComparison } from "./report.js";
 import { createBackup } from "./backup.js";
-import { createContactFlow, createContactFlowModule, updateContactFlowModuleContent, updateContactFlowContent } from "./connect/operations.js";
+import { createContactFlow, createContactFlowModule, updateContactFlowModuleContent, updateContactFlowContent, updateContactFlowMetadata, updateContactFlowModuleMetadata, calculateTagDiff, updateResourceTags } from "./connect/operations.js";
 import { replaceArnsInContent } from "./arn-replacement.js";
 
 import type { ConnectClient, ContactFlowType, ContactFlowSummary, ContactFlowModuleSummary, ContactFlow, ContactFlowModule } from "@aws-sdk/client-connect";
@@ -136,7 +136,7 @@ async function createStubResources(targetClient: ConnectClient, targetInstanceId
 }
 
 
-async function updateModuleContents(targetClient: ConnectClient, targetInstanceId: string, modulesToCreate: ContactFlowModuleSummary[], modulesToUpdate: ContactFlowModuleSummary[], sourceModuleDetails: Map<string, ContactFlowModule>, createdArnMappings: Map<string, string>, completeMappings: Map<string, string>) {
+async function updateModuleContents(targetClient: ConnectClient, targetInstanceId: string, modulesToCreate: ContactFlowModuleSummary[], modulesToUpdate: ContactFlowModuleSummary[], sourceModuleDetails: Map<string, ContactFlowModule>, targetModuleDetails: Map<string, ContactFlowModule>, createdArnMappings: Map<string, string>, completeMappings: Map<string, string>) {
   console.log("\nPass 2: Updating module content...");
 
   for (const moduleSummary of modulesToCreate) {
@@ -164,6 +164,9 @@ async function updateModuleContents(targetClient: ConnectClient, targetInstanceI
     const sourceModule = Array.from(sourceModuleDetails.values()).find(m => m.Name === moduleName);
     if (!sourceModule) continue;
 
+    const targetModule = targetModuleDetails.get(targetModuleSummary.Id!);
+    if (!targetModule) continue;
+
     const updatedContent = replaceArnsInContent(sourceModule.Content!, completeMappings);
 
     await updateContactFlowModuleContent(
@@ -173,6 +176,25 @@ async function updateModuleContents(targetClient: ConnectClient, targetInstanceI
       updatedContent
     );
 
+    if (sourceModule.Description !== targetModule.Description) {
+      await updateContactFlowModuleMetadata(
+        targetClient,
+        targetInstanceId,
+        targetModuleSummary.Id!,
+        sourceModule.Description
+      );
+    }
+
+    const tagDiff = calculateTagDiff(sourceModule.Tags, targetModule.Tags);
+    if (Object.keys(tagDiff.toAdd).length > 0 || tagDiff.toRemove.length > 0) {
+      await updateResourceTags(
+        targetClient,
+        targetModuleSummary.Arn!,
+        tagDiff.toAdd,
+        tagDiff.toRemove
+      );
+    }
+
     console.log(`  Updated content for existing module: ${sourceModule.Name}`);
   }
 
@@ -180,7 +202,7 @@ async function updateModuleContents(targetClient: ConnectClient, targetInstanceI
 }
 
 
-async function updateFlowContents(targetClient: ConnectClient, targetInstanceId: string, flowsToCreate: ContactFlowSummary[], flowsToUpdate: ContactFlowSummary[], sourceFlowDetails: Map<string, ContactFlow>, createdArnMappings: Map<string, string>, completeMappings: Map<string, string>) {
+async function updateFlowContents(targetClient: ConnectClient, targetInstanceId: string, flowsToCreate: ContactFlowSummary[], flowsToUpdate: ContactFlowSummary[], sourceFlowDetails: Map<string, ContactFlow>, targetFlowDetails: Map<string, ContactFlow>, createdArnMappings: Map<string, string>, completeMappings: Map<string, string>) {
   console.log("\nPass 2: Updating flow content...");
 
   for (const flowSummary of flowsToCreate) {
@@ -210,6 +232,9 @@ async function updateFlowContents(targetClient: ConnectClient, targetInstanceId:
     const sourceFlow = Array.from(sourceFlowDetails.values()).find(f => f.Name === flowName);
     if (!sourceFlow) continue;
 
+    const targetFlow = targetFlowDetails.get(targetFlowSummary.Id!);
+    if (!targetFlow) continue;
+
     const updatedContent = replaceArnsInContent(sourceFlow.Content!, completeMappings);
     const shouldPublish = sourceFlow.Status === "PUBLISHED" && cliFlags.publish;
     const flowIdToUpdate = shouldPublish ? targetFlowSummary.Id! : targetFlowSummary.Id! + ':$SAVED';
@@ -220,6 +245,26 @@ async function updateFlowContents(targetClient: ConnectClient, targetInstanceId:
       flowIdToUpdate,
       updatedContent
     );
+
+    if (sourceFlow.Description !== targetFlow.Description) {
+      await updateContactFlowMetadata(
+        targetClient,
+        targetInstanceId,
+        targetFlowSummary.Id!,
+        undefined,
+        sourceFlow.Description
+      );
+    }
+
+    const tagDiff = calculateTagDiff(sourceFlow.Tags, targetFlow.Tags);
+    if (Object.keys(tagDiff.toAdd).length > 0 || tagDiff.toRemove.length > 0) {
+      await updateResourceTags(
+        targetClient,
+        targetFlowSummary.Arn!,
+        tagDiff.toAdd,
+        tagDiff.toRemove
+      );
+    }
 
     console.log(`  Updated content for existing flow: ${sourceFlow.Name}`);
   }
@@ -353,6 +398,7 @@ export async function copyFlows(options: CopyFlowsOptions) {
     comparisonResult.modulesToCreateList,
     comparisonResult.modulesToUpdateList,
     comparisonResult.validationResult.sourceModuleDetails,
+    comparisonResult.validationResult.targetModuleDetails,
     createdArnMappings,
     completeMappings
   );
@@ -363,6 +409,7 @@ export async function copyFlows(options: CopyFlowsOptions) {
     comparisonResult.flowsToCreateList,
     comparisonResult.flowsToUpdateList,
     comparisonResult.validationResult.sourceFlowDetails,
+    comparisonResult.validationResult.targetFlowDetails,
     createdArnMappings,
     completeMappings
   );

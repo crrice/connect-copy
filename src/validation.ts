@@ -53,6 +53,8 @@ export interface ValidationResult {
   resourceMappings: ResourceMappings;
   sourceFlowDetails: Map<string, ContactFlow>;
   sourceModuleDetails: Map<string, ContactFlowModule>;
+  targetFlowDetails: Map<string, ContactFlow>;
+  targetModuleDetails: Map<string, ContactFlowModule>;
 }
 
 
@@ -99,7 +101,7 @@ function formatArnCategoryName(category: string): string {
 }
 
 
-export function validateFlowDependencies(sourceInventory: InstanceInventory, targetInventory: InstanceInventory, sourceFlowsToCopy: ContactFlowSummary[], sourceModulesToCopy: ContactFlowModuleSummary[], sourceFlowDetails: Map<string, ContactFlow>, sourceModuleDetails: Map<string, ContactFlowModule>, verbose: boolean): ValidationResult {
+export function validateFlowDependencies(sourceInventory: InstanceInventory, targetInventory: InstanceInventory, sourceFlowsToCopy: ContactFlowSummary[], sourceModulesToCopy: ContactFlowModuleSummary[], sourceFlowDetails: Map<string, ContactFlow>, sourceModuleDetails: Map<string, ContactFlowModule>, targetFlowDetails: Map<string, ContactFlow>, targetModuleDetails: Map<string, ContactFlowModule>, verbose: boolean): ValidationResult {
   console.log("Validating dependencies...");
 
   const resourceMappings = buildAllResourceMappings(sourceInventory, targetInventory);
@@ -178,6 +180,8 @@ export function validateFlowDependencies(sourceInventory: InstanceInventory, tar
     targetInventory,
     resourceMappings,
     sourceFlowDetails,
-    sourceModuleDetails
+    sourceModuleDetails,
+    targetFlowDetails,
+    targetModuleDetails
   };
 }

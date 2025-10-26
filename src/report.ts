@@ -189,6 +189,8 @@ export async function compareAndValidateFlows(sourceClient: any, targetClient: a
 
     const sourceFlowDetails = new Map<string, ContactFlow>();
     const sourceModuleDetails = new Map<string, ContactFlowModule>();
+    const targetFlowDetails = new Map<string, ContactFlow>();
+    const targetModuleDetails = new Map<string, ContactFlowModule>();
     const flowsToValidate: ContactFlowSummary[] = [];
     const modulesToValidate: ContactFlowModuleSummary[] = [];
 
@@ -223,6 +225,7 @@ export async function compareAndValidateFlows(sourceClient: any, targetClient: a
 
       if (contentDiffers || descriptionDiffers || tagsDiffer || statusDiffers) {
         sourceFlowDetails.set(flowSummary.Id!, sourceFlowFull);
+        targetFlowDetails.set(targetFlow.Id!, targetFlowFull);
         flowsToValidate.push(flowSummary);
         flowsToUpdateList.push(targetFlow);
         if (cliFlags.verbose) {
@@ -268,6 +271,7 @@ export async function compareAndValidateFlows(sourceClient: any, targetClient: a
 
       if (contentDiffers || descriptionDiffers || tagsDiffer) {
         sourceModuleDetails.set(moduleSummary.Id!, sourceModuleFull);
+        targetModuleDetails.set(targetModule.Id!, targetModuleFull);
         modulesToValidate.push(moduleSummary);
         modulesToUpdateList.push(targetModule);
         if (cliFlags.verbose) {
@@ -300,6 +304,8 @@ export async function compareAndValidateFlows(sourceClient: any, targetClient: a
       modulesToValidate,
       sourceFlowDetails,
       sourceModuleDetails,
+      targetFlowDetails,
+      targetModuleDetails,
       cliFlags.verbose
     );
 
