@@ -105,8 +105,6 @@ export function validateFlowDependencies(sourceInventory: InstanceInventory, tar
   console.log("Validating dependencies...");
 
   const resourceMappings = buildAllResourceMappings(sourceInventory, targetInventory);
-  const targetFlowsByArn = new Map(targetInventory.flows.map(f => [f.Arn!, f]));
-  const targetModulesByArn = new Map(targetInventory.modules.map(m => [m.Arn!, m]));
 
   const targetFlowsByName = new Map(targetInventory.flows.map(f => [f.Name!, f]));
   const targetModulesByName = new Map(targetInventory.modules.map(m => [m.Name!, m]));
@@ -144,7 +142,7 @@ export function validateFlowDependencies(sourceInventory: InstanceInventory, tar
       }
     }
 
-    const validation = validateDependencies(arns, resourceMappings, flowsWillCreate, modulesWillCreate, targetFlowsByArn, targetModulesByArn, fullFlow.Name!);
+    const validation = validateDependencies(arns, resourceMappings, flowsWillCreate, modulesWillCreate, fullFlow.Name!);
     allErrors.push(...validation.errors);
     allWarnings.push(...validation.warnings);
   }
@@ -165,7 +163,7 @@ export function validateFlowDependencies(sourceInventory: InstanceInventory, tar
       }
     }
 
-    const validation = validateDependencies(arns, resourceMappings, flowsWillCreate, modulesWillCreate, targetFlowsByArn, targetModulesByArn, fullModule.Name!);
+    const validation = validateDependencies(arns, resourceMappings, flowsWillCreate, modulesWillCreate, fullModule.Name!);
     allErrors.push(...validation.errors);
     allWarnings.push(...validation.warnings);
   }

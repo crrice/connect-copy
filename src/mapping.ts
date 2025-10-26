@@ -146,7 +146,7 @@ function normalizeViewArn(arn: string): string {
 }
 
 
-export function validateDependencies(extractedArns: string[], resourceMappings: ResourceMappings, flowsWillCreate: Set<string>, modulesWillCreate: Set<string>, targetFlowsByArn: Map<string, ContactFlowSummary>, targetModulesByArn: Map<string, ContactFlowModuleSummary>, referencedByName: string): { errors: ValidationError[], warnings: ValidationWarning[] } {
+export function validateDependencies(extractedArns: string[], resourceMappings: ResourceMappings, flowsWillCreate: Set<string>, modulesWillCreate: Set<string>, referencedByName: string): { errors: ValidationError[], warnings: ValidationWarning[] } {
   const errors: ValidationError[] = [];
   const warnings: ValidationWarning[] = [];
 
@@ -158,7 +158,6 @@ export function validateDependencies(extractedArns: string[], resourceMappings: 
 
     if (category === 'flow') {
       if (flowsWillCreate.has(arn)) continue;
-      if (targetFlowsByArn.has(arn)) continue;
 
       errors.push({
         severity: 'error',
@@ -174,7 +173,6 @@ export function validateDependencies(extractedArns: string[], resourceMappings: 
 
     if (category === 'module') {
       if (modulesWillCreate.has(arn)) continue;
-      if (targetModulesByArn.has(arn)) continue;
 
       errors.push({
         severity: 'error',
