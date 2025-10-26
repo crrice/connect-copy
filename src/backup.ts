@@ -54,7 +54,6 @@ export async function createBackup(client: ConnectClient, instanceId: string, re
     const filePath = join(modulesDir, fileName);
 
     const moduleData = {
-      InstanceId: instanceId,
       Name: fullModule.Name,
       Description: fullModule.Description,
       Content: fullModule.Content,
@@ -79,7 +78,6 @@ export async function createBackup(client: ConnectClient, instanceId: string, re
     const filePath = join(flowsDir, fileName);
 
     const flowData = {
-      InstanceId: instanceId,
       Name: fullFlow.Name,
       Type: fullFlow.Type,
       Description: fullFlow.Description,
@@ -116,21 +114,30 @@ function generateRestoreScript(metadata: BackupMetadata, region: string): string
   lines.push(`# Restore backup created: ${metadata.timestamp}`);
   lines.push(`# Target: ${metadata.targetInstance.instanceId} (${region})`);
   lines.push('');
+  lines.push(`INSTANCE_ID="${metadata.targetInstance.instanceId}"`);
+  lines.push('');
 
   if (metadata.modules.length > 0) {
     lines.push('# Modules');
     for (const module of metadata.modules) {
-      lines.push(`aws connect create-contact-flow-module --cli-input-json file://${module.file} --region ${region}`);
+      lines.push(`aws connect create-contact-flow-module \\`);
+      lines.push(`  --instance-id $INSTANCE_ID \\`);
+      lines.push(`  --cli-input-json file://${module.file} \\`);
+      lines.push(`  --region ${region}`);
+      lines.push('');
     }
-    lines.push('');
   }
 
   if (metadata.flows.length > 0) {
     lines.push('# Flows');
     for (const flow of metadata.flows) {
-      lines.push(`aws connect create-contact-flow --cli-input-json file://${flow.file} --region ${region}`);
+      lines.push(`aws connect create-contact-flow \\`);
+      lines.push(`  --instance-id $INSTANCE_ID \\`);
+      lines.push(`  --cli-input-json file://${flow.file} \\`);
+      lines.push(`  --region ${region}`);
+      lines.push('');
     }
   }
 
-  return lines.join('\n') + '\n';
+  return lines.join('\n');
 }
