@@ -96,12 +96,20 @@ Tool to copy contact flows from one Amazon Connect instance to another (e.g., de
 ## CLI Usage
 
 ### Configuration Files
-Tool requires two config files (source and target), each containing:
+Tool requires two config files:
+
+**Source config** (required fields):
 - `instanceId` - Amazon Connect instance ID
 - `region` - AWS region
 - `flowFilters` - Optional include/exclude patterns for flow selection
 - `moduleFilters` - Optional include/exclude patterns for module selection
 - `viewFilters` - Optional include/exclude patterns for view selection
+
+**Target config** (required fields):
+- `instanceId` - Amazon Connect instance ID
+- `region` - AWS region
+
+**Note**: Filters only apply to the source config. They determine which flows/modules/views to select from the source instance. The target config only specifies the destination instance.
 
 ### Commands
 

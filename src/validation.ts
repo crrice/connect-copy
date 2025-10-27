@@ -5,7 +5,7 @@ import { buildAllResourceMappings, validateDependencies } from "./mapping.js";
 import type { InstanceInventory, ResourceMappings } from "./mapping.js";
 
 
-export interface ConnectConfig {
+export interface SourceConfig {
   instanceId: string;
   region: string;
   flowFilters?: {
@@ -21,6 +21,15 @@ export interface ConnectConfig {
     exclude?: string[];
   };
 }
+
+
+export interface TargetConfig {
+  instanceId: string;
+  region: string;
+}
+
+
+export type ConnectConfig = SourceConfig | TargetConfig;
 
 
 export interface ValidationError {

@@ -54,6 +54,10 @@ Create two configuration files: one for source and one for target instance.
   "flowFilters": {
     "include": ["*"],
     "exclude": ["Test_*", "Draft_*"]
+  },
+  "moduleFilters": {
+    "include": ["*"],
+    "exclude": []
   }
 }
 ```
@@ -63,13 +67,11 @@ Create two configuration files: one for source and one for target instance.
 ```json
 {
   "instanceId": "11111111-2222-3333-4444-555555555555",
-  "region": "us-east-1",
-  "flowFilters": {
-    "include": ["*"],
-    "exclude": []
-  }
+  "region": "us-east-1"
 }
 ```
+
+**Important**: Filters (`flowFilters`, `moduleFilters`, `viewFilters`) only apply to the source configuration. They determine which resources to select from the source instance. The target configuration only specifies the destination instance.
 
 ### Filter Patterns
 

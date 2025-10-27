@@ -9,7 +9,7 @@ import { buildAllResourceMappings } from "./mapping.js";
 import { matchesFlowFilters, matchesFlowFiltersWithReason } from "./filters.js";
 import { validateFlowDependencies } from "./validation.js";
 import { replaceArnsInContent } from "./arn-replacement.js";
-import type { ConnectConfig, ValidationResult } from "./validation.js";
+import type { SourceConfig, TargetConfig, ValidationResult } from "./validation.js";
 import type { InstanceInventory } from "./mapping.js";
 
 
@@ -37,8 +37,8 @@ export interface FlowComparisonResult {
 export interface SetupResult {
   sourceClient: ConnectClient;
   targetClient: ConnectClient;
-  sourceConfig: ConnectConfig;
-  targetConfig: ConnectConfig;
+  sourceConfig: SourceConfig;
+  targetConfig: TargetConfig;
   sourceInventory: InstanceInventory;
   targetInventory: InstanceInventory;
 }
@@ -48,8 +48,8 @@ export async function setupInstanceComparison(sourceConfigPath: string, targetCo
   const sourceConfigData = await readFile(sourceConfigPath, "utf-8");
   const targetConfigData = await readFile(targetConfigPath, "utf-8");
 
-  const sourceConfig: ConnectConfig = JSON.parse(sourceConfigData);
-  const targetConfig: ConnectConfig = JSON.parse(targetConfigData);
+  const sourceConfig: SourceConfig = JSON.parse(sourceConfigData);
+  const targetConfig: TargetConfig = JSON.parse(targetConfigData);
 
   console.log("Source: " + sourceConfigPath);
   console.log(`  Instance ID: ${sourceConfig.instanceId}`);
@@ -123,7 +123,7 @@ function jsonSemanticallyEqual(sourceContent: string, targetContent: string, arn
 }
 
 
-export async function compareAndValidateFlows(sourceClient: any, targetClient: any, sourceConfig: ConnectConfig, targetConfig: ConnectConfig, sourceInventory: InstanceInventory, targetInventory: InstanceInventory): Promise<FlowComparisonResult> {
+export async function compareAndValidateFlows(sourceClient: any, targetClient: any, sourceConfig: SourceConfig, targetConfig: TargetConfig, sourceInventory: InstanceInventory, targetInventory: InstanceInventory): Promise<FlowComparisonResult> {
     console.log("\n" + "=".repeat(50));
     console.log("Flow Content Comparison");
     console.log("=".repeat(50) + "\n");

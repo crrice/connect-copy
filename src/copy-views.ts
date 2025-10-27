@@ -9,7 +9,7 @@ import type { ConnectClient, View } from "@aws-sdk/client-connect";
 import { createConnectClient } from "./connect/client.js";
 import { listViews } from "./connect/resources.js";
 import { matchesFlowFilters } from "./filters.js";
-import type { ConnectConfig } from "./validation.js";
+import type { SourceConfig, TargetConfig } from "./validation.js";
 
 
 export interface CopyViewsOptions {
@@ -89,8 +89,8 @@ export async function copyViews(options: CopyViewsOptions) {
   const sourceConfigData = await readFile(options.sourceConfig, "utf-8");
   const targetConfigData = await readFile(options.targetConfig, "utf-8");
 
-  const sourceConfig: ConnectConfig = JSON.parse(sourceConfigData);
-  const targetConfig: ConnectConfig = JSON.parse(targetConfigData);
+  const sourceConfig: SourceConfig = JSON.parse(sourceConfigData);
+  const targetConfig: TargetConfig = JSON.parse(targetConfigData);
 
   console.log("Source: " + options.sourceConfig);
   console.log(`  Instance ID: ${sourceConfig.instanceId}`);
