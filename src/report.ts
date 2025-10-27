@@ -7,7 +7,7 @@ import { gatherFlowInventory, describeContactFlow, describeContactFlowModule } f
 import { gatherResourceInventory } from "./connect/resources.js";
 import { buildAllResourceMappings } from "./mapping.js";
 import { matchesFlowFilters, matchesFlowFiltersWithReason } from "./filters.js";
-import { validateFlowDependencies } from "./validation.js";
+import { validateFlowDependencies, validateSourceConfig, validateTargetConfig } from "./validation.js";
 import { replaceArnsInContent } from "./arn-replacement.js";
 import type { SourceConfig, TargetConfig, ValidationResult } from "./validation.js";
 import type { InstanceInventory } from "./mapping.js";
@@ -48,8 +48,8 @@ export async function setupInstanceComparison(sourceConfigPath: string, targetCo
   const sourceConfigData = await readFile(sourceConfigPath, "utf-8");
   const targetConfigData = await readFile(targetConfigPath, "utf-8");
 
-  const sourceConfig: SourceConfig = JSON.parse(sourceConfigData);
-  const targetConfig: TargetConfig = JSON.parse(targetConfigData);
+  const sourceConfig = validateSourceConfig(JSON.parse(sourceConfigData));
+  const targetConfig = validateTargetConfig(JSON.parse(targetConfigData));
 
   console.log("Source: " + sourceConfigPath);
   console.log(`  Instance ID: ${sourceConfig.instanceId}`);

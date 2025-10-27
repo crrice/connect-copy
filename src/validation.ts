@@ -1,5 +1,6 @@
 
 import type { ContactFlowSummary, ContactFlowModuleSummary, ContactFlow, ContactFlowModule } from "@aws-sdk/client-connect";
+import { V } from "@crrice/vali";
 import { extractDependencyArnsFromFlow, categorizeArn } from "./arn-utils.js";
 import { buildAllResourceMappings, validateDependencies } from "./mapping.js";
 import type { InstanceInventory, ResourceMappings } from "./mapping.js";
@@ -191,4 +192,45 @@ export function validateFlowDependencies(sourceInventory: InstanceInventory, tar
     targetFlowDetails,
     targetModuleDetails
   };
+}
+
+
+const FilterValidator = V.shape({
+  include: V.arrayOf(V.string).optional,
+  exclude: V.arrayOf(V.string).optional
+}).optional;
+
+
+const SourceConfigValidator = V.shape({
+  instanceId: V.string.uuid,
+  region: V.string.minLen(1),
+  flowFilters: FilterValidator,
+  moduleFilters: FilterValidator,
+  viewFilters: FilterValidator
+});
+
+
+const TargetConfigValidator = V.shape({
+  instanceId: V.string.uuid,
+  region: V.string.minLen(1)
+});
+
+
+export function validateSourceConfig(data: unknown): SourceConfig {
+  if (SourceConfigValidator(data)) {
+    return data;
+  }
+
+  const errors = SourceConfigValidator.getErrors();
+  throw new Error(`Invalid source config:\n${errors.join('\n')}`);
+}
+
+
+export function validateTargetConfig(data: unknown): TargetConfig {
+  if (TargetConfigValidator(data)) {
+    return data;
+  }
+
+  const errors = TargetConfigValidator.getErrors();
+  throw new Error(`Invalid target config:\n${errors.join('\n')}`);
 }
