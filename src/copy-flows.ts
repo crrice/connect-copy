@@ -1,6 +1,8 @@
 
 import { createInterface } from "readline";
 import { readFile } from "fs/promises";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 import { cliFlags } from "./cli-flags.js";
 import { reportResourceDifferences, compareAndValidateFlows, setupInstanceComparison } from "./report.js";
 import { createBackup } from "./backup.js";
@@ -9,6 +11,11 @@ import { replaceArnsInContent } from "./arn-replacement.js";
 
 import type { ConnectClient, ContactFlowType, ContactFlowSummary, ContactFlowModuleSummary, ContactFlow, ContactFlowModule } from "@aws-sdk/client-connect";
 import type { FlowComparisonResult } from "./report.js";
+
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const PROJECT_ROOT = join(__dirname, '..');
 
 
 export interface CopyFlowsOptions {
@@ -68,18 +75,20 @@ async function promptConfirm(message: string): Promise<boolean> {
 
 
 async function generateModuleStubContent(): Promise<string> {
-  const templateContent = await readFile('templates/modules/default-module-content.json', 'utf-8');
+  const templatePath = join(PROJECT_ROOT, 'templates/modules/default-module-content.json');
+  const templateContent = await readFile(templatePath, 'utf-8');
   return templateContent;
 }
 
 
 async function generateFlowStubContent(flowType: ContactFlowType): Promise<string> {
-  const templatePath = FLOW_TYPE_TO_TEMPLATE[flowType];
+  const templateRelativePath = FLOW_TYPE_TO_TEMPLATE[flowType];
 
-  if (!templatePath) {
+  if (!templateRelativePath) {
     throw new Error(`Unsupported flow type: ${flowType}`);
   }
 
+  const templatePath = join(PROJECT_ROOT, templateRelativePath);
   const templateContent = await readFile(templatePath, 'utf-8');
   return templateContent;
 }
