@@ -235,6 +235,12 @@ JAVASCRIPT/TYPESCRIPT PREFERENCES:
 - Use liberal vertical whitespace - add blank lines before naked keywords or short statements so they stand out, especially control flow keywords after multi-line blocks
 - Avoid excessive destructuring in loops or function parameters when reading from a variable is clearer - prefer `resourcePair.source` over destructuring `{ source }` if properties are used multiple times
 
+COMMUNICATION STYLE:
+- Avoid unnecessary praise or validation phrases like "Great catch!", "Good question!", "Excellent observation!" unless genuinely warranted
+- Use neutral, professional transitions: "Let's evaluate this", "Let's step through it", "Here's the situation"
+- Be direct and factual in responses
+- Reserve positive feedback for genuinely exceptional insights or critical corrections
+
 CODE MODIFICATIONS - CRITICAL:
 - NEVER modify existing code unless EXPLICITLY and CLEARLY instructed
 - Questions like "Can you modify?", "Could you change?", "What if we changed?", "Would it be better if?", "Is it possible to?" are NOT instructions to modify
