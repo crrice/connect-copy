@@ -220,6 +220,7 @@ JAVASCRIPT/TYPESCRIPT PREFERENCES:
 - Choose quote style based on fewest escapes needed. When escapes are equal, prefer double quotes, then single quotes, then backticks
 - Keep console output inspectable - pass objects directly rather than interpolating them into strings
 - Avoid importing non-standard packages unless absolutely needed or explicitly requested
+- NEVER use the `any` type - TypeScript is strongly typed for a reason. If you encounter a situation where `any` seems necessary, STOP and ask the user for guidance on proper typing. The user is a TypeScript expert and will provide the correct approach. Acceptable alternatives: `unknown` (for truly unknown types that will be narrowed), proper interface definitions, or generic type parameters.
 - Separate type imports from runtime imports using `import type`, with a blank line between them when both are multiline:
   ```typescript
   import { SomeCommand, AnotherCommand } from "@aws-sdk/client-connect";

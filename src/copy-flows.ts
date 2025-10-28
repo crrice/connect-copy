@@ -100,6 +100,7 @@ async function createStubResources(targetClient: ConnectClient, targetInstanceId
   console.log("\nPass 1: Creating stub resources...");
 
   for (const moduleSummary of modulesToCreate) {
+    // AWS SDK guarantees Id/Name/Arn exist on successfully returned resources
     const sourceModule = sourceModuleDetails.get(moduleSummary.Id!);
     if (!sourceModule) continue;
 
@@ -149,6 +150,7 @@ async function updateModuleContents(targetClient: ConnectClient, targetInstanceI
   console.log("\nPass 2: Updating module content...");
 
   for (const moduleSummary of modulesToCreate) {
+    // AWS SDK guarantees Id/Name/Arn/Content exist on successfully returned resources
     const sourceModule = sourceModuleDetails.get(moduleSummary.Id!);
     if (!sourceModule) continue;
 
@@ -215,6 +217,7 @@ async function updateFlowContents(targetClient: ConnectClient, targetInstanceId:
   console.log("\nPass 2: Updating flow content...");
 
   for (const flowSummary of flowsToCreate) {
+    // AWS SDK guarantees Id/Name/Arn/Content/Status exist on successfully returned resources
     const sourceFlow = sourceFlowDetails.get(flowSummary.Id!);
     if (!sourceFlow) continue;
 

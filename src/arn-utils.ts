@@ -7,6 +7,21 @@ import { getArnFieldsForActionType } from "./arn-field-mapping.js";
 const ARN_PATTERN = /arn:aws:connect:[a-z0-9-]+:\d+:instance\/[a-f0-9-]+\/[a-z-]+\/[a-f0-9-]+/g;
 
 
+type TypeofResult = 'string' | 'number' | 'bigint' | 'boolean' | 'symbol' | 'undefined' | 'object' | 'function';
+
+
+type TypeofResultToType = {
+  'string': string;
+  'number': number;
+  'bigint': bigint;
+  'boolean': boolean;
+  'symbol': symbol;
+  'undefined': undefined;
+  'object': object;
+  'function': Function;
+};
+
+
 export type ArnCategory = 'flow' | 'module' | 'queue' | 'prompt' | 'lambda' |
                           'lex' | 's3' | 'view' | 'routing-profile' | 'hours-of-operation' |
                           'quick-connect' | 'security-profile' | 'hierarchy-group' |
@@ -47,16 +62,19 @@ export function extractArnsFromFlowContent(content: string): string[] {
  * Get a value from a nested object using a dot-notation path.
  * Example: getNestedValue({a: {b: "value"}}, "a.b") returns "value"
  */
-function getNestedValue(obj: any, path: string): any {
+function getNestedValue<T extends TypeofResult = 'string'>(obj: unknown, path: string, expectedType: T = 'string' as T /* Default 'string' matches T's default; when T specified explicitly, expectedType must be provided */): TypeofResultToType[T] | undefined {
   const parts = path.split('.');
-  let current = obj;
+  let current: unknown = obj;
 
   for (const part of parts) {
     if (current == null || typeof current !== 'object') return undefined;
-    current = current[part];
+    // All non-null objects in JavaScript are string-indexable
+    current = (current as Record<string, unknown>)[part];
   }
 
-  return current;
+  if (typeof current !== expectedType) return undefined;
+  // typeof check validated current's type; assertion bridges runtime check to compile-time mapped type
+  return current as TypeofResultToType[T];
 }
 
 
@@ -67,8 +85,8 @@ function getNestedValue(obj: any, path: string): any {
  * - Strings that look like UUIDs or resource IDs
  * - S3 URIs
  */
-function isArnOrResourceId(value: any): boolean {
-  if (typeof value !== 'string' || value.length === 0) return false;
+function isArnOrResourceId(value: string): boolean {
+  if (value.length === 0) return false;
 
   // Skip dynamic references like $.Attributes.something
   if (value.startsWith('$.')) return false;
@@ -94,7 +112,7 @@ export function extractDependencyArnsFromFlow(resource: ContactFlow | ContactFlo
   const content = resource.Content ?? "";
 
   // Parse the content JSON
-  let flowContent: any;
+  let flowContent: unknown;
   try {
     flowContent = JSON.parse(content);
   } catch (error) {
@@ -105,11 +123,16 @@ export function extractDependencyArnsFromFlow(resource: ContactFlow | ContactFlo
   const arns = new Set<string>();
 
   // Traverse all actions
-  const actions = flowContent.Actions ?? [];
+  // AWS Connect API flow content JSON structure includes optional Actions array
+  const actions = (flowContent as { Actions?: unknown[] }).Actions ?? [];
 
   for (const action of actions) {
-    const actionType = action.Type;
-    const parameters = action.Parameters ?? {};
+    // AWS flow format specifies action objects contain optional Type and Parameters fields
+    const actionObj = action as { Type?: unknown; Parameters?: unknown };
+    const actionType = actionObj.Type;
+    const parameters = actionObj.Parameters ?? {};
+
+    if (typeof actionType !== 'string') continue;
 
     // Get known ARN fields for this action type
     const arnFields = getArnFieldsForActionType(actionType);
@@ -118,7 +141,7 @@ export function extractDependencyArnsFromFlow(resource: ContactFlow | ContactFlo
     for (const field of arnFields) {
       const value = getNestedValue(parameters, field.path);
 
-      if (isArnOrResourceId(value)) {
+      if (value && isArnOrResourceId(value)) {
         arns.add(value);
       }
     }

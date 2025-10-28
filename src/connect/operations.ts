@@ -57,34 +57,21 @@ export async function updateContactFlowContent(client: ConnectClient, instanceId
 
 
 export async function updateContactFlowMetadata(client: ConnectClient, instanceId: string, contactFlowId: string, state?: ContactFlowState, description?: string) {
-  const command: any = {
+  await client.send(new UpdateContactFlowMetadataCommand({
     InstanceId: instanceId,
-    ContactFlowId: contactFlowId
-  };
-
-  if (state !== undefined) {
-    command.ContactFlowState = state;
-  }
-
-  if (description !== undefined) {
-    command.Description = description;
-  }
-
-  await client.send(new UpdateContactFlowMetadataCommand(command));
+    ContactFlowId: contactFlowId,
+    ContactFlowState: state,
+    Description: description
+  }));
 }
 
 
 export async function updateContactFlowModuleMetadata(client: ConnectClient, instanceId: string, contactFlowModuleId: string, description?: string) {
-  const command: any = {
+  await client.send(new UpdateContactFlowModuleMetadataCommand({
     InstanceId: instanceId,
-    ContactFlowModuleId: contactFlowModuleId
-  };
-
-  if (description !== undefined) {
-    command.Description = description;
-  }
-
-  await client.send(new UpdateContactFlowModuleMetadataCommand(command));
+    ContactFlowModuleId: contactFlowModuleId,
+    Description: description
+  }));
 }
 
 

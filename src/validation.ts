@@ -137,6 +137,7 @@ export function validateFlowDependencies(sourceInventory: InstanceInventory, tar
   const allWarnings: ValidationWarning[] = [];
 
   for (const flowSummary of sourceFlowsToCopy) {
+    // AWS SDK guarantees Id/Name exist on successfully returned flow summaries
     const fullFlow = sourceFlowDetails.get(flowSummary.Id!);
     if (!fullFlow) continue;
 
