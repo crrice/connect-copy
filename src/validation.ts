@@ -202,7 +202,7 @@ const FilterValidator = V.shape({
 
 
 const SourceConfigValidator = V.shape({
-  instanceId: V.string.uuid,
+  instanceId: V.string.uuid.regex(/^[0-9a-f-]+$/),
   region: V.string.minLen(1),
   flowFilters: FilterValidator,
   moduleFilters: FilterValidator,
@@ -211,7 +211,7 @@ const SourceConfigValidator = V.shape({
 
 
 const TargetConfigValidator = V.shape({
-  instanceId: V.string.uuid,
+  instanceId: V.string.uuid.regex(/^[0-9a-f-]+$/),
   region: V.string.minLen(1)
 });
 

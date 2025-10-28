@@ -45,6 +45,11 @@ npx connect-flow-copy [options]
 
 Create two configuration files: one for source and one for target instance.
 
+**Configuration Fields:**
+- `instanceId` - Amazon Connect instance ID (UUID format, lowercase required)
+- `region` - AWS region (e.g., "us-east-1", "us-west-2")
+- `flowFilters`, `moduleFilters`, `viewFilters` - Optional filter patterns (source only)
+
 ### Source Configuration (`source-config.json`)
 
 ```json
