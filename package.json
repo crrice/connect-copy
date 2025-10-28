@@ -10,6 +10,7 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc --watch",
+    "compile-test-utils": "tsc --outDir test-utils/dist --module NodeNext --target ES2022 --moduleResolution NodeNext --esModuleInterop --declaration --declarationMap --sourceMap --rootDir test-utils test-utils/assertions.ts test-utils/auth.ts test-utils/content.ts test-utils/flows.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
