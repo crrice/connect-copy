@@ -14,8 +14,8 @@ interface BackupMetadata {
   };
   flowsBackedUp: number;
   modulesBackedUp: number;
-  flows: Array<{ name: string; id: string; arn: string; file: string }>;
-  modules: Array<{ name: string; id: string; arn: string; file: string }>;
+  flows: { name: string; id: string; arn: string; file: string }[];
+  modules: { name: string; id: string; arn: string; file: string }[];
 }
 
 

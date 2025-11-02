@@ -1,5 +1,4 @@
 
-
 export const cliFlags = {
   publish: true,
   yes: false,

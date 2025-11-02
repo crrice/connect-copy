@@ -1,5 +1,4 @@
 
-
 import { readFile } from "fs/promises";
 import { createInterface } from "readline";
 import { DescribeViewCommand, CreateViewCommand, UpdateViewContentCommand, TagResourceCommand, UntagResourceCommand } from "@aws-sdk/client-connect";
