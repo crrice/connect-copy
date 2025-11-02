@@ -199,22 +199,22 @@ export function validateFlowDependencies(sourceInventory: InstanceInventory, tar
 const FilterValidator = V.shape({
   include: V.arrayOf(V.string).optional,
   exclude: V.arrayOf(V.string).optional
-}).optional;
+}).noextra;
 
 
 const SourceConfigValidator = V.shape({
   instanceId: V.string.uuid.regex(/^[0-9a-f-]+$/),
   region: V.string.minLen(1),
-  flowFilters: FilterValidator,
-  moduleFilters: FilterValidator,
-  viewFilters: FilterValidator
-});
+  flowFilters: FilterValidator.optional,
+  moduleFilters: FilterValidator.optional,
+  viewFilters: FilterValidator.optional
+}).noextra;
 
 
 const TargetConfigValidator = V.shape({
   instanceId: V.string.uuid.regex(/^[0-9a-f-]+$/),
   region: V.string.minLen(1)
-});
+}).noextra;
 
 
 export function validateSourceConfig(data: unknown): SourceConfig {
