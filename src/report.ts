@@ -162,7 +162,7 @@ export async function compareAndValidateFlows(sourceClient: any, targetClient: a
       if (excludedFlows.length > 0) {
         console.log(`\nExcluded flows (${excludedFlows.length}):`);
         for (const flow of excludedFlows) {
-          const result = matchesFlowFiltersWithReason(flow.Name ?? "", sourceConfig.flowFilters);
+          const result = matchesFlowFiltersWithReason(flow.Name ?? "", sourceConfig.flowFilters) as { matches: false; reason: string };
           console.log(`  - ${flow.Name} (${result.reason})`);
         }
       }
@@ -172,7 +172,7 @@ export async function compareAndValidateFlows(sourceClient: any, targetClient: a
       if (excludedModules.length > 0) {
         console.log(`\nExcluded modules (${excludedModules.length}):`);
         for (const module of excludedModules) {
-          const result = matchesFlowFiltersWithReason(module.Name ?? "", sourceConfig.moduleFilters);
+          const result = matchesFlowFiltersWithReason(module.Name ?? "", sourceConfig.moduleFilters) as { matches: false; reason: string };
           console.log(`  - ${module.Name} (${result.reason})`);
         }
       }

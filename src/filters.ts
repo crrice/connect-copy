@@ -8,10 +8,9 @@ export interface FlowFilters {
 }
 
 
-export interface FilterResult {
-  matches: boolean;
-  reason?: string;
-}
+export type FilterResult =
+  | { matches: true }
+  | { matches: false; reason: string };
 
 
 export function matchesFlowFilters(flowName: string, filters?: FlowFilters): boolean {

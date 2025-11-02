@@ -6,7 +6,7 @@ export const cliFlags = {
 };
 
 
-export function setCliFlags(options: { publish: boolean; yes: boolean; verbose: boolean }) {
+export function setCliFlags(options: typeof cliFlags) {
   cliFlags.publish = options.publish;
   cliFlags.yes = options.yes;
   cliFlags.verbose = options.verbose;

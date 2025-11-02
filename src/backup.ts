@@ -19,13 +19,13 @@ interface BackupMetadata {
 }
 
 
-function sanitizeFileName(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+function sanitizeFileName(filename: string): string {
+  return filename.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
 
 export async function createBackup(client: ConnectClient, instanceId: string, region: string, flowsToUpdate: ContactFlowSummary[], modulesToUpdate: ContactFlowModuleSummary[]): Promise<string> {
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5) + 'Z';
+  const timestamp = sanitizeFileName(new Date().toISOString().split('.')[0] + 'Z');
   const backupDir = join('backups', `backup-${timestamp}`);
   const flowsDir = join(backupDir, 'flows');
   const modulesDir = join(backupDir, 'modules');
@@ -50,7 +50,7 @@ export async function createBackup(client: ConnectClient, instanceId: string, re
 
   for (const moduleSummary of modulesToUpdate) {
     const fullModule = await describeContactFlowModule(client, instanceId, moduleSummary.Id!);
-    const fileName = sanitizeFileName(moduleSummary.Name!) + '.json';
+    const fileName = sanitizeFileName(`${moduleSummary.Name!}-${moduleSummary.Id!}.json`);
     const filePath = join(modulesDir, fileName);
 
     const moduleData = {
@@ -74,7 +74,7 @@ export async function createBackup(client: ConnectClient, instanceId: string, re
 
   for (const flowSummary of flowsToUpdate) {
     const fullFlow = await describeContactFlow(client, instanceId, flowSummary.Id!);
-    const fileName = sanitizeFileName(flowSummary.Name!) + '.json';
+    const fileName = sanitizeFileName(`${flowSummary.Name!}-${flowSummary.Id!}.json`);
     const filePath = join(flowsDir, fileName);
 
     const flowData = {
