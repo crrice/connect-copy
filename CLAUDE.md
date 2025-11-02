@@ -221,6 +221,7 @@ JAVASCRIPT/TYPESCRIPT PREFERENCES:
 - Keep console output inspectable - pass objects directly rather than interpolating them into strings
 - Avoid importing non-standard packages unless absolutely needed or explicitly requested
 - NEVER use the `any` type - TypeScript is strongly typed for a reason. If you encounter a situation where `any` seems necessary, STOP and ask the user for guidance on proper typing. The user is a TypeScript expert and will provide the correct approach. Acceptable alternatives: `unknown` (for truly unknown types that will be narrowed), proper interface definitions, or generic type parameters.
+- Use `type[]` syntax instead of `Array<type>` for array types - it's more concise and the standard TypeScript convention (e.g., `string[]` not `Array<string>`)
 - Separate type imports from runtime imports using `import type`, with a blank line between them when both are multiline:
   ```typescript
   import { SomeCommand, AnotherCommand } from "@aws-sdk/client-connect";
@@ -235,6 +236,8 @@ JAVASCRIPT/TYPESCRIPT PREFERENCES:
   ```
 - Use liberal vertical whitespace - add blank lines before naked keywords or short statements so they stand out, especially control flow keywords after multi-line blocks
 - Avoid excessive destructuring in loops or function parameters when reading from a variable is clearer - prefer `resourcePair.source` over destructuring `{ source }` if properties are used multiple times
+- Prefer type inference when runtime values are the source of truth - avoid explicit type annotations that duplicate runtime structure
+- Reuse types via `typeof` where appropriate to maintain single source of truth (e.g., `function foo(options: typeof configObject)`)
 
 COMMUNICATION STYLE:
 - Avoid unnecessary praise or validation phrases like "Great catch!", "Good question!", "Excellent observation!" unless genuinely warranted
