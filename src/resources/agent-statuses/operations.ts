@@ -41,11 +41,7 @@ export async function createAgentStatus(client: ConnectClient, instanceId: strin
   const response = await client.send(
     new CreateAgentStatusCommand({
       InstanceId: instanceId,
-      Name: config.Name,
-      State: config.State,
-      Description: config.Description,
-      DisplayOrder: config.DisplayOrder,
-      Tags: config.Tags
+      ...config
     })
   );
 
@@ -61,10 +57,7 @@ export async function updateAgentStatus(client: ConnectClient, instanceId: strin
     new UpdateAgentStatusCommand({
       InstanceId: instanceId,
       AgentStatusId: agentStatusId,
-      Name: config.Name,
-      State: config.State,
-      Description: config.Description,
-      DisplayOrder: config.DisplayOrder
+      ...config
     })
   );
 }
