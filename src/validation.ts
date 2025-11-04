@@ -25,6 +25,10 @@ export interface SourceConfig {
     include?: string[];
     exclude?: string[];
   };
+  hoursFilters?: {
+    include?: string[];
+    exclude?: string[];
+  };
 }
 
 
@@ -212,7 +216,8 @@ const SourceConfigValidator = V.shape({
   flowFilters: FilterValidator.optional,
   moduleFilters: FilterValidator.optional,
   viewFilters: FilterValidator.optional,
-  agentStatusFilters: FilterValidator.optional
+  agentStatusFilters: FilterValidator.optional,
+  hoursFilters: FilterValidator.optional
 }).noextra;
 
 
