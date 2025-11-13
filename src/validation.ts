@@ -29,6 +29,10 @@ export interface SourceConfig {
     include?: string[];
     exclude?: string[];
   };
+  hierarchyGroupFilters?: {
+    include?: string[];
+    exclude?: string[];
+  };
 }
 
 
@@ -217,7 +221,8 @@ const SourceConfigValidator = V.shape({
   moduleFilters: FilterValidator.optional,
   viewFilters: FilterValidator.optional,
   agentStatusFilters: FilterValidator.optional,
-  hoursFilters: FilterValidator.optional
+  hoursFilters: FilterValidator.optional,
+  hierarchyGroupFilters: FilterValidator.optional
 }).noextra;
 
 

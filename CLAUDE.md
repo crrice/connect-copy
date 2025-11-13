@@ -8,15 +8,15 @@ Tool to copy contact flows from one Amazon Connect instance to another (e.g., de
 ### Identifiable by Name (straightforward mapping)
 - Queues
 - Routing profiles
-- Hours of operation
+- Hours of operation ✅ (implemented)
 - Prompts (audio recordings)
 - Contact flows
 - Contact flow modules
 - Quick connects
-- Agent statuses
+- Agent statuses ✅ (implemented)
 - Security profiles
-- User hierarchies
-- Views
+- User hierarchy groups ✅ (implemented)
+- Views ✅ (implemented)
 
 ### Environment-Specific Resources (must pre-exist in target)
 - **Lambda functions** - ARNs differ across accounts/regions, must exist in target
@@ -104,12 +104,15 @@ Tool requires two config files:
 - `flowFilters` - Optional include/exclude patterns for flow selection
 - `moduleFilters` - Optional include/exclude patterns for module selection
 - `viewFilters` - Optional include/exclude patterns for view selection
+- `agentStatusFilters` - Optional include/exclude patterns for agent status selection
+- `hoursFilters` - Optional include/exclude patterns for hours of operation selection
+- `hierarchyGroupFilters` - Optional include/exclude patterns for hierarchy group selection
 
 **Target config** (required fields):
 - `instanceId` - Amazon Connect instance ID
 - `region` - AWS region
 
-**Note**: Filters only apply to the source config. They determine which flows/modules/views to select from the source instance. The target config only specifies the destination instance.
+**Note**: Filters only apply to the source config. They determine which resources to select from the source instance. The target config only specifies the destination instance.
 
 ### Commands
 
@@ -161,6 +164,49 @@ connect-flow-copy copy-views \
 Options:
 - `--include-aws-managed` (optional) - Include AWS managed views (default: skip)
 - `--verbose` (optional) - Show detailed per-view comparison results
+
+**Copy Agent Statuses Command** - Copy custom agent statuses:
+```bash
+connect-flow-copy copy-agent-statuses \
+  --source-config <path> \
+  --target-config <path> \
+  --source-profile <profile> \
+  --target-profile <profile> \
+  [--verbose]
+```
+
+Options:
+- `--verbose` (optional) - Show detailed per-status comparison results
+
+**Copy Hours of Operation Command** - Copy hours of operation:
+```bash
+connect-flow-copy copy-hours-of-operation \
+  --source-config <path> \
+  --target-config <path> \
+  --source-profile <profile> \
+  --target-profile <profile> \
+  [--verbose]
+```
+
+Options:
+- `--verbose` (optional) - Show detailed per-hours comparison results
+
+**Copy Hierarchy Groups Command** - Copy user hierarchy groups:
+```bash
+connect-flow-copy copy-hierarchy-groups \
+  --source-config <path> \
+  --target-config <path> \
+  --source-profile <profile> \
+  --target-profile <profile> \
+  [--force-hierarchy-recreate] \
+  [--verbose]
+```
+
+Options:
+- `--force-hierarchy-recreate` (optional) - Allow deleting and recreating groups with parent mismatches (WARNING: permanently severs historical contact data)
+- `--verbose` (optional) - Show detailed per-group comparison results
+
+Note: Hierarchy groups have parent-child relationships. The tool validates that all parent groups are included if child groups are selected by filters. Groups with parent mismatches require the `--force-hierarchy-recreate` flag to proceed with deletion and recreation.
 
 ## Key Considerations
 
