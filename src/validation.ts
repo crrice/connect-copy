@@ -9,32 +9,19 @@ import type { InstanceInventory, ResourceMappings } from "./mapping.js";
 export interface SourceConfig {
   instanceId: string;
   region: string;
-  flowFilters?: {
-    include?: string[];
-    exclude?: string[];
-  };
-  moduleFilters?: {
-    include?: string[];
-    exclude?: string[];
-  };
-  viewFilters?: {
-    include?: string[];
-    exclude?: string[];
-  };
-  agentStatusFilters?: {
-    include?: string[];
-    exclude?: string[];
-  };
-  hoursFilters?: {
-    include?: string[];
-    exclude?: string[];
-  };
-  hierarchyGroupFilters?: {
-    include?: string[];
-    exclude?: string[];
-  };
+  flowFilters?: FilterConfig;
+  moduleFilters?: FilterConfig;
+  viewFilters?: FilterConfig;
+  agentStatusFilters?: FilterConfig;
+  hoursFilters?: FilterConfig;
+  hierarchyGroupFilters?: FilterConfig;
+  securityProfileFilters?: FilterConfig;
 }
 
+export interface FilterConfig {
+  include?: string[];
+  exclude?: string[];
+}
 
 export interface TargetConfig {
   instanceId: string;
@@ -222,7 +209,8 @@ const SourceConfigValidator = V.shape({
   viewFilters: FilterValidator.optional,
   agentStatusFilters: FilterValidator.optional,
   hoursFilters: FilterValidator.optional,
-  hierarchyGroupFilters: FilterValidator.optional
+  hierarchyGroupFilters: FilterValidator.optional,
+  securityProfileFilters: FilterValidator.optional
 }).noextra;
 
 

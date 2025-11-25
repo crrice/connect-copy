@@ -7,6 +7,7 @@ import { copyViews } from "./copy-views.js";
 import { copyAgentStatuses } from "./resources/agent-statuses/copy.js";
 import { copyHoursOfOperations } from "./resources/hours-of-operation/copy.js";
 import { copyHierarchyGroups } from "./resources/hierarchy-groups/copy.js";
+import { copySecurityProfiles } from "./resources/security-profiles/copy.js";
 import { runReport } from "./report.js";
 
 const program = new Command();
@@ -93,10 +94,24 @@ program
   .requiredOption("--source-profile <profile>", "AWS profile for source account")
   .requiredOption("--target-profile <profile>", "AWS profile for target account")
   .option("--force-hierarchy-recreate", "Allow deleting and recreating groups with parent mismatches", false)
+  .option("--force-structure-update", "Allow overwriting target hierarchy structure if it differs from source", false)
   .option("--verbose", "Enable detailed logging", false)
   .action((options) => {
     setCliFlags({ publish: true, yes: false, verbose: options.verbose });
     copyHierarchyGroups(options);
+  });
+
+program
+  .command("copy-security-profiles")
+  .description("Copy security profiles between instances")
+  .requiredOption("--source-config <path>", "Path to source configuration file")
+  .requiredOption("--target-config <path>", "Path to target configuration file")
+  .requiredOption("--source-profile <profile>", "AWS profile for source account")
+  .requiredOption("--target-profile <profile>", "AWS profile for target account")
+  .option("--verbose", "Enable detailed logging", false)
+  .action((options) => {
+    setCliFlags({ publish: true, yes: false, verbose: options.verbose });
+    copySecurityProfiles(options);
   });
 
 program.parse();

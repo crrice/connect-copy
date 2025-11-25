@@ -1,5 +1,7 @@
 
 import type { ConnectClient, HoursOfOperationSummary, HoursOfOperation, HoursOfOperationConfig, HoursOfOperationDays } from "@aws-sdk/client-connect";
+
+import * as CliUtil from "../../utils/cli-utils.js";
 import { listHoursOfOperations } from "../../connect/resources.js";
 import { matchesFlowFilters } from "../../filters.js";
 import { describeHoursOfOperation } from "./operations.js";
@@ -70,19 +72,7 @@ function hoursOfOperationContentMatches(source: HoursOfOperation, target: HoursO
 
 
 function hoursOfOperationTagsMatch(source: HoursOfOperation, target: HoursOfOperation): boolean {
-  const sourceTags = source.Tags ?? {};
-  const targetTags = target.Tags ?? {};
-
-  const sourceKeys = Object.keys(sourceTags).sort();
-  const targetKeys = Object.keys(targetTags).sort();
-
-  if (sourceKeys.length !== targetKeys.length) return false;
-
-  for (const key of sourceKeys) {
-    if (sourceTags[key] !== targetTags[key]) return false;
-  }
-
-  return true;
+  return CliUtil.recordsMatch(source.Tags, target.Tags);
 }
 
 
@@ -145,26 +135,8 @@ export function getHoursOfOperationDiff(source: HoursOfOperation, target: HoursO
 }
 
 
-export function getHoursOfOperationTagDiff(source: HoursOfOperation, target: HoursOfOperation): { toAdd: string[]; toRemove: string[] } {
-  const sourceTags = source.Tags ?? {};
-  const targetTags = target.Tags ?? {};
-
-  const toAdd: string[] = [];
-  const toRemove: string[] = [];
-
-  for (const [key, value] of Object.entries(sourceTags)) {
-    if (targetTags[key] !== value) {
-      toAdd.push(`${key}=${value}`);
-    }
-  }
-
-  for (const key of Object.keys(targetTags)) {
-    if (!(key in sourceTags)) {
-      toRemove.push(key);
-    }
-  }
-
-  return { toAdd, toRemove };
+export function getHoursOfOperationTagDiff(source: HoursOfOperation, target: HoursOfOperation): { toAdd: Record<string, string>; toRemove: string[] } {
+  return CliUtil.getRecordDiff(source.Tags, target.Tags);
 }
 
 

@@ -1,16 +1,13 @@
 
-import { readFile } from "fs/promises";
-import { createInterface } from "readline";
-import { TagResourceCommand, UntagResourceCommand, DeleteUserHierarchyGroupCommand } from "@aws-sdk/client-connect";
 
 import type { ConnectClient } from "@aws-sdk/client-connect";
-
-import { createConnectClient } from "../../connect/client.js";
-import { validateSourceConfig, validateTargetConfig } from "../../validation.js";
-import { compareHierarchyGroups, getHierarchyGroupDiff, getHierarchyGroupTagDiff, getParentName } from "./report.js";
-import { createHierarchyGroup, updateHierarchyGroupName } from "./operations.js";
-
 import type { HierarchyGroupAction, HierarchyGroupComparisonResult } from "./report.js";
+
+import * as AwsUtil from "../../utils/aws-utils.js";
+import * as CliUtil from "../../utils/cli-utils.js";
+import { createConnectClient } from "../../connect/client.js";
+import { compareHierarchyGroups, displayHierarchyGroupPlan, getParentLevel } from "./report.js";
+import { createHierarchyGroup, updateUserHierarchyStructure, deleteHierarchyGroup } from "./operations.js";
 
 
 export interface CopyHierarchyGroupsOptions {
@@ -20,343 +17,199 @@ export interface CopyHierarchyGroupsOptions {
   targetProfile: string;
   verbose: boolean;
   forceHierarchyRecreate?: boolean;
+  forceStructureUpdate?: boolean;
 }
 
 
-async function promptContinue(message: string): Promise<boolean> {
-  const rl = createInterface({
-    input: process.stdin,
-    output: process.stdout
-  });
+async function executeHierarchyGroupCopy(targetClient: ConnectClient, targetInstanceId: string, result: HierarchyGroupComparisonResult, verbose: boolean) {
 
-  return new Promise(resolve => {
-    rl.question(`\n${message} (y/n): `, answer => {
-      rl.close();
-      resolve(answer.toLowerCase() === "y" || answer.toLowerCase() === "yes");
-    });
-  });
-}
-
-
-function sortGroupsByDependency(actions: HierarchyGroupAction[], sourceGroupNameToParentName: Map<string, string | undefined>): HierarchyGroupAction[] {
-  const actionsByName = new Map<string, HierarchyGroupAction>();
-  for (const action of actions) {
-    actionsByName.set(action.groupName, action);
-  }
-
-  const visited = new Set<string>();
-  const sorted: HierarchyGroupAction[] = [];
-
-  function visit(groupName: string) {
-    if (visited.has(groupName)) return;
-    visited.add(groupName);
-
-    const parentName = sourceGroupNameToParentName.get(groupName);
-    if (parentName && actionsByName.has(parentName)) {
-      visit(parentName);
-    }
-
-    const action = actionsByName.get(groupName);
-    if (action) {
-      sorted.push(action);
-    }
-  }
-
-  for (const action of actions) {
-    visit(action.groupName);
-  }
-
-  return sorted;
-}
-
-
-function displayHierarchyGroupPlan(result: HierarchyGroupComparisonResult, verbose: boolean) {
-  const toCreate = result.actions.filter(a => a.action === "create");
-  const toUpdate = result.actions.filter(a => a.action === "update");
-  const toRecreate = result.actions.filter(a => a.action === "recreate");
   const toSkip = result.actions.filter(a => a.action === "skip");
+  const toRecreate = result.actions.filter(a => a.action === "recreate");
+  const toCreate = result.actions.filter(a => a.action === "create");
+  const toTag = result.actions.filter(a => a.action === "update_tags");
 
-  console.log(`\nSummary:`);
-  console.log(`  Hierarchy groups to create: ${toCreate.length}`);
-  console.log(`  Hierarchy groups to update: ${toUpdate.length}`);
-  if (toRecreate.length > 0) {
-    console.log(`  Hierarchy groups to recreate (parent mismatch): ${toRecreate.length}`);
-  }
-  console.log(`  Hierarchy groups to skip (identical): ${toSkip.length}`);
-  console.log(`  Total processed: ${result.groupsToProcess.length}`);
-
-  if (toCreate.length > 0) {
-    console.log(`\nHierarchy groups to create:`);
-    for (const action of toCreate) {
-      console.log(`  - ${action.groupName}`);
-      if (verbose) {
-        const parentName = getParentName(action.sourceGroup);
-        console.log(`      Parent: ${parentName}`);
-        if (action.sourceGroup.Tags && Object.keys(action.sourceGroup.Tags).length > 0) {
-          console.log(`      Tags: ${Object.entries(action.sourceGroup.Tags).map(([k, v]) => `${k}=${v}`).join(", ")}`);
-        }
-      }
-    }
+  // Delete any items that will be recreated first (reverse level order - children before parents):
+  for (const recreateOp of toRecreate.sort((a, b) => +(b.sourceGroup.LevelId ?? 0) - +(a.sourceGroup.LevelId ?? 0))) {
+    logGroupRecreate(recreateOp, verbose);
+    await deleteHierarchyGroup(targetClient, targetInstanceId, recreateOp.targetGroup?.Id!);
   }
 
-  if (toUpdate.length > 0) {
-    console.log(`\nHierarchy groups to update:`);
-    for (const action of toUpdate) {
-      console.log(`  - ${action.groupName}`);
-      if (verbose && action.targetGroup) {
-        const diffs = getHierarchyGroupDiff(action.sourceGroup, action.targetGroup);
-        for (const diff of diffs) {
-          console.log(`      ${diff}`);
-        }
-        if (action.tagsNeedUpdate) {
-          const tagDiff = getHierarchyGroupTagDiff(action.sourceGroup, action.targetGroup);
-          if (tagDiff.toAdd.length > 0) console.log(`      Tags to add: ${tagDiff.toAdd.join(", ")}`);
-          if (tagDiff.toRemove.length > 0) console.log(`      Tags to remove: ${tagDiff.toRemove.join(", ")}`);
-        }
-      }
-    }
-  }
+  // Used for logging in verbose mode:
+  const sourceGroupNameToParentName = Object.fromEntries(result.actions
+    .map(op => [op.sourceGroup.Name!, getParentLevel(op.sourceGroup)?.Name]));
 
-  if (toRecreate.length > 0) {
-    console.log(`\nHierarchy groups requiring RECREATION (parent mismatch):`);
-    console.log(`WARNING: Recreation will DELETE and recreate these groups.`);
-    console.log(`This may affect user associations and historical reporting data.`);
-    for (const action of toRecreate) {
-      console.log(`  - ${action.groupName}`);
-      if (verbose) {
-        const sourceParentName = getParentName(action.sourceGroup);
-        const targetParentName = getParentName(action.targetGroup!);
-        console.log(`      Source parent: ${sourceParentName}`);
-        console.log(`      Target parent: ${targetParentName}`);
-      }
-    }
-  }
-
-  if (toSkip.length > 0 && verbose) {
-    console.log(`\nHierarchy groups to skip (identical):`);
-    for (const action of toSkip) {
-      console.log(`  - ${action.groupName}`);
-    }
-  }
-}
-
-
-async function executeHierarchyGroupCopy(targetClient: ConnectClient, targetInstanceId: string, result: HierarchyGroupComparisonResult, sourceGroupNameToParentName: Map<string, string | undefined>, forceRecreate: boolean, verbose: boolean) {
-  const hasRecreateActions = result.actions.some(a => a.action === "recreate");
-
-  if (hasRecreateActions && !forceRecreate) {
-    console.error("\n❌ ERROR: Parent mismatches detected.");
-    console.error("The following groups have different parents in source vs target:");
-    console.error("");
-    for (const action of result.actions.filter(a => a.action === "recreate")) {
-      console.error(`  - ${action.groupName}`);
-      console.error(`    Source parent: ${getParentName(action.sourceGroup)}`);
-      console.error(`    Target parent: ${getParentName(action.targetGroup!)}`);
-    }
-    console.error("");
-    console.error("⚠️  Fixing this requires deletion, which PERMANENTLY severs historical contact data.");
-    console.error("To proceed with recreation, use --force-hierarchy-recreate flag.");
-    console.error("");
-    throw new Error("Parent mismatches detected. Use --force-hierarchy-recreate to proceed.");
-  }
-
-  const sortedActions = sortGroupsByDependency(result.actions.filter(a => a.action !== "skip"), sourceGroupNameToParentName);
-
+  // Build mapping of group names to target IDs (for parent references):
   const nameToTargetId = new Map<string, string>();
   for (const action of result.actions) {
-    if (action.targetGroupId && action.action !== "recreate") {
-      nameToTargetId.set(action.groupName, action.targetGroupId);
+    if (action.targetGroup && action.action !== "recreate") {
+      nameToTargetId.set(action.sourceGroup.Name!, action.targetGroup.Id!);
     }
   }
 
-  let created = 0;
-  let updated = 0;
-  let recreated = 0;
-  let tagsUpdated = 0;
+  // Create the new groups (sequential, parents before children):
+  const orderedCreates = [...toCreate, ...toRecreate]
+    .sort((o1, o2) => +(o1.sourceGroup.LevelId ?? 0) - +(o2.sourceGroup.LevelId ?? 0));
 
-  for (const action of sortedActions) {
-    if (action.action === "create") {
-      const sourceParentName = sourceGroupNameToParentName.get(action.groupName);
-      const parentGroupId = sourceParentName ? nameToTargetId.get(sourceParentName) : undefined;
+  for (const createOp of orderedCreates) {
+    logGroupCreate(createOp, sourceGroupNameToParentName, verbose);
 
-      console.log(`Creating hierarchy group: ${action.groupName}`);
-      if (verbose) {
-        const parentName = sourceParentName ?? "(none)";
-        console.log(`  Parent: ${parentName}`);
-        if (action.sourceGroup.Tags && Object.keys(action.sourceGroup.Tags).length > 0) {
-          console.log(`  Tags: ${Object.entries(action.sourceGroup.Tags).map(([k, v]) => `${k}=${v}`).join(", ")}`);
-        }
-      }
+    const sourceParentName = sourceGroupNameToParentName[createOp.sourceGroup.Name!];
+    const parentGroupId = sourceParentName ? nameToTargetId.get(sourceParentName) : undefined;
 
-      const config: { Name: string; ParentGroupId?: string; Tags?: Record<string, string> } = {
-        Name: action.sourceGroup.Name!
-      };
-      if (parentGroupId !== undefined) config.ParentGroupId = parentGroupId;
-      if (action.sourceGroup.Tags !== undefined) config.Tags = action.sourceGroup.Tags;
+    const config: { Name: string; ParentGroupId?: string; Tags?: Record<string, string> } = {
+      Name: createOp.sourceGroup.Name!
+    };
+    if (parentGroupId !== undefined) config.ParentGroupId = parentGroupId;
+    if (Object.keys(createOp.sourceGroup.Tags ?? {}).length) config.Tags = createOp.sourceGroup.Tags!;
 
-      const result = await createHierarchyGroup(targetClient, targetInstanceId, config);
-
-      nameToTargetId.set(action.groupName, result.id);
-      created++;
-      continue;
-    }
-
-    if (action.action === "recreate") {
-      console.log(`Recreating hierarchy group: ${action.groupName}`);
-      if (verbose) {
-        console.log(`  Parent changed - deleting and recreating`);
-      }
-
-      await targetClient.send(
-        new DeleteUserHierarchyGroupCommand({
-          InstanceId: targetInstanceId,
-          HierarchyGroupId: action.targetGroupId!
-        })
-      );
-
-      const sourceParentName = sourceGroupNameToParentName.get(action.groupName);
-      const parentGroupId = sourceParentName ? nameToTargetId.get(sourceParentName) : undefined;
-
-      const config: { Name: string; ParentGroupId?: string; Tags?: Record<string, string> } = {
-        Name: action.sourceGroup.Name!
-      };
-      if (parentGroupId !== undefined) config.ParentGroupId = parentGroupId;
-      if (action.sourceGroup.Tags !== undefined) config.Tags = action.sourceGroup.Tags;
-
-      const result = await createHierarchyGroup(targetClient, targetInstanceId, config);
-
-      nameToTargetId.set(action.groupName, result.id);
-      recreated++;
-      continue;
-    }
-
-    if (action.action === "update") {
-      const diffs = getHierarchyGroupDiff(action.sourceGroup, action.targetGroup!);
-
-      if (diffs.length > 0) {
-        console.log(`Updating hierarchy group: ${action.groupName}`);
-        if (verbose && action.targetGroup) {
-          for (const diff of diffs) {
-            console.log(`  ${diff}`);
-          }
-        }
-
-        await updateHierarchyGroupName(targetClient, targetInstanceId, action.targetGroupId!, {
-          Name: action.sourceGroup.Name!
-        });
-
-        updated++;
-      }
-
-      if (action.tagsNeedUpdate) {
-        console.log(`Updating tags for hierarchy group: ${action.groupName}`);
-
-        const sourceTags = action.sourceGroup.Tags ?? {};
-        const targetTags = action.targetGroup?.Tags ?? {};
-
-        const tagsToAdd: Record<string, string> = {};
-        for (const [key, value] of Object.entries(sourceTags)) {
-          if (targetTags[key] !== value) {
-            tagsToAdd[key] = value;
-          }
-        }
-
-        const tagsToRemove = Object.keys(targetTags).filter(key => !(key in sourceTags));
-
-        if (verbose) {
-          if (Object.keys(tagsToAdd).length > 0) {
-            console.log(`  Tags to add: ${Object.entries(tagsToAdd).map(([k, v]) => `${k}=${v}`).join(", ")}`);
-          }
-          if (tagsToRemove.length > 0) {
-            console.log(`  Tags to remove: ${tagsToRemove.join(", ")}`);
-          }
-        }
-
-        if (Object.keys(tagsToAdd).length > 0) {
-          await targetClient.send(
-            new TagResourceCommand({
-              resourceArn: action.targetGroupArn!,
-              tags: tagsToAdd
-            })
-          );
-        }
-
-        if (tagsToRemove.length > 0) {
-          await targetClient.send(
-            new UntagResourceCommand({
-              resourceArn: action.targetGroupArn!,
-              tagKeys: tagsToRemove
-            })
-          );
-        }
-
-        tagsUpdated++;
-      }
-    }
+    const createdGroup = await createHierarchyGroup(targetClient, targetInstanceId, config);
+    nameToTargetId.set(createOp.sourceGroup.Name!, createdGroup.id);
   }
 
-  console.log(`\nCopy complete: ${created} created, ${updated} updated, ${recreated} recreated, ${tagsUpdated} tags updated`);
+  await Promise.all(toTag.map(async tagOp => {
+    logTagsUpdate(tagOp, verbose);
+
+    const { toAdd, toRemove } = CliUtil.getRecordDiff(tagOp.sourceGroup.Tags, tagOp.targetGroup?.Tags);
+    await AwsUtil.updateResourceTags(targetClient, tagOp.targetGroup!.Arn!, toAdd, toRemove);
+  }));
+
+  console.log(`\nCopy complete: ${toCreate.length} created, ${toTag.length} tag updates, ${toRecreate.length} recreated, ${toSkip.length} skipped`);
+}
+
+
+function logGroupCreate(action: HierarchyGroupAction, sourceGroupNameToParentName: Record<string, string | undefined>, verbose: boolean) {
+  console.log(`Creating hierarchy group: ${action.sourceGroup.Name}`);
+  if (!verbose) return;
+
+  const parentName = sourceGroupNameToParentName[action.sourceGroup.Name!] ?? "(none)";
+  console.log(`  Parent: ${parentName}`);
+  console.log(`  Tags: ${!action.sourceGroup.Tags ? "(none)" : Object.entries(action.sourceGroup.Tags).map(([k, v]) => `${k}=${v}`).join(", ")}`);
+}
+
+
+function logGroupRecreate(action: HierarchyGroupAction, verbose: boolean) {
+  console.log(`Recreating hierarchy group: ${action.sourceGroup.Name}`);
+  if (!verbose) return;
+
+  console.log(`  Parent changed - deleting and recreating`);
+}
+
+
+function logTagsUpdate(action: HierarchyGroupAction, verbose: boolean) {
+  console.log(`Updating tags for hierarchy group: ${action.sourceGroup.Name}`);
+  if (!verbose) return;
+
+  const tagDiff = CliUtil.getRecordDiff(action.sourceGroup.Tags, action.targetGroup!.Tags);
+  if (Object.keys(tagDiff.toAdd).length) console.log(`  Tags to add: ${Object.entries(tagDiff.toAdd).map(([k, v]) => `${k}=${v}`).join(", ")}`);
+  if (tagDiff.toRemove.length) console.log(`  Tags to remove: ${tagDiff.toRemove.join(", ")}`);
 }
 
 
 export async function copyHierarchyGroups(options: CopyHierarchyGroupsOptions) {
-  const sourceConfigData = await readFile(options.sourceConfig, "utf-8");
-  const targetConfigData = await readFile(options.targetConfig, "utf-8");
-
-  const sourceConfig = validateSourceConfig(JSON.parse(sourceConfigData));
-  const targetConfig = validateTargetConfig(JSON.parse(targetConfigData));
-
-  console.log("Source: " + options.sourceConfig);
-  console.log(`  Instance ID: ${sourceConfig.instanceId}`);
-  console.log(`  Region: ${sourceConfig.region}`);
-  console.log(`  Profile: ${options.sourceProfile}`);
-
-  console.log("\nTarget: " + options.targetConfig);
-  console.log(`  Instance ID: ${targetConfig.instanceId}`);
-  console.log(`  Region: ${targetConfig.region}`);
-  console.log(`  Profile: ${options.targetProfile}`);
+  const { source: sourceConfig, target: targetConfig } = await CliUtil.loadConfigs(options);
 
   const sourceClient = createConnectClient(sourceConfig.region, options.sourceProfile);
   const targetClient = createConnectClient(targetConfig.region, options.targetProfile);
 
   console.log("\nAnalyzing hierarchy group differences...");
   const comparisonResult = await compareHierarchyGroups(
-    sourceClient,
-    targetClient,
-    sourceConfig.instanceId,
-    targetConfig.instanceId,
-    sourceConfig
+    {
+      sourceClient,
+      targetClient,
+      sourceInstanceId: sourceConfig.instanceId,
+      targetInstanceId: targetConfig.instanceId,
+      filterConfig: sourceConfig.hierarchyGroupFilters
+    },
+    options.forceHierarchyRecreate,
+    options.forceStructureUpdate
   );
+
+  if (comparisonResult.hierarchyStructure.action === 'create') {
+    console.log("\n[INFO] Target hierarchy structure is empty - will copy from source");
+    if (options.verbose) {
+      const s = comparisonResult.hierarchyStructure.sourceStructure;
+      console.log("  Structure to apply:");
+      if (s.LevelOne) console.log(`    Level 1: ${s.LevelOne.Name}`);
+      if (s.LevelTwo) console.log(`    Level 2: ${s.LevelTwo.Name}`);
+      if (s.LevelThree) console.log(`    Level 3: ${s.LevelThree.Name}`);
+      if (s.LevelFour) console.log(`    Level 4: ${s.LevelFour.Name}`);
+      if (s.LevelFive) console.log(`    Level 5: ${s.LevelFive.Name}`);
+    }
+  } else if (comparisonResult.hierarchyStructure.action === 'update') {
+    console.log("\n[INFO] Target hierarchy structure differs - will update");
+    if (options.verbose) {
+      const s = comparisonResult.hierarchyStructure.sourceStructure;
+      console.log("  Structure to apply:");
+      if (s.LevelOne) console.log(`    Level 1: ${s.LevelOne.Name}`);
+      if (s.LevelTwo) console.log(`    Level 2: ${s.LevelTwo.Name}`);
+      if (s.LevelThree) console.log(`    Level 3: ${s.LevelThree.Name}`);
+      if (s.LevelFour) console.log(`    Level 4: ${s.LevelFour.Name}`);
+      if (s.LevelFive) console.log(`    Level 5: ${s.LevelFive.Name}`);
+    }
+  } else if (comparisonResult.hierarchyStructure.action === 'skip') {
+    console.log("\n[INFO] Hierarchy structures match");
+    if (options.verbose) {
+      const s = comparisonResult.hierarchyStructure.sourceStructure;
+      console.log("  Current structure:");
+      if (s.LevelOne) console.log(`    Level 1: ${s.LevelOne.Name}`);
+      if (s.LevelTwo) console.log(`    Level 2: ${s.LevelTwo.Name}`);
+      if (s.LevelThree) console.log(`    Level 3: ${s.LevelThree.Name}`);
+      if (s.LevelFour) console.log(`    Level 4: ${s.LevelFour.Name}`);
+      if (s.LevelFive) console.log(`    Level 5: ${s.LevelFive.Name}`);
+    }
+  }
 
   displayHierarchyGroupPlan(comparisonResult, options.verbose);
 
-  const needsCopy = comparisonResult.actions.some(a => a.action !== "skip");
-
-  if (!needsCopy) {
-    console.log("\nNo hierarchy groups need to be copied - all groups match");
+  if (comparisonResult.hierarchyStructure.action === 'abort') {
+    console.log("\nCopy aborted");
     return;
   }
 
-  const shouldContinue = await promptContinue("Proceed with copying hierarchy groups?");
+  const needsCopy = comparisonResult.actions.some(a => a.action !== "skip");
+  const needsStructureUpdate = comparisonResult.hierarchyStructure.action !== 'skip';
+
+  if (!needsCopy && !needsStructureUpdate) {
+    console.log("\nNo actions to perform");
+    return;
+  }
+
+  const shouldContinue = await CliUtil.promptContinue("Proceed with copying hierarchy groups?");
   if (!shouldContinue) {
     console.log("Copy cancelled by user");
     return;
   }
 
-  console.log("\nCopying hierarchy groups...");
+  if (needsStructureUpdate) {
+    if (comparisonResult.hierarchyStructure.action === 'create') {
+      console.log("\nTarget hierarchy structure is empty - copying from source...");
+    } else {
+      console.log("\nUpdating target hierarchy structure...");
+    }
 
-  const sourceGroupNameToParentName = new Map<string, string | undefined>();
-  for (const action of comparisonResult.actions) {
-    const parentName = getParentName(action.sourceGroup);
-    sourceGroupNameToParentName.set(action.groupName, parentName === "(none)" ? undefined : parentName);
+    await updateUserHierarchyStructure(
+      targetClient,
+      targetConfig.instanceId,
+      comparisonResult.hierarchyStructure.sourceStructure
+    );
+
+    if (options.verbose) {
+      const s = comparisonResult.hierarchyStructure.sourceStructure;
+      console.log("Structure updated:");
+      if (s.LevelOne) console.log(`  Level 1: ${s.LevelOne.Name}`);
+      if (s.LevelTwo) console.log(`  Level 2: ${s.LevelTwo.Name}`);
+      if (s.LevelThree) console.log(`  Level 3: ${s.LevelThree.Name}`);
+      if (s.LevelFour) console.log(`  Level 4: ${s.LevelFour.Name}`);
+      if (s.LevelFive) console.log(`  Level 5: ${s.LevelFive.Name}`);
+    }
   }
+
+  console.log("\nCopying hierarchy groups...");
 
   await executeHierarchyGroupCopy(
     targetClient,
     targetConfig.instanceId,
     comparisonResult,
-    sourceGroupNameToParentName,
-    options.forceHierarchyRecreate ?? false,
     options.verbose
   );
 }

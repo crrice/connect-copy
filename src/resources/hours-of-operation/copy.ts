@@ -1,12 +1,9 @@
 
-import { readFile } from "fs/promises";
-import { createInterface } from "readline";
-import { TagResourceCommand, UntagResourceCommand } from "@aws-sdk/client-connect";
-
 import type { ConnectClient } from "@aws-sdk/client-connect";
 
+import * as AwsUtil from "../../utils/aws-utils.js";
+import * as CliUtil from "../../utils/cli-utils.js";
 import { createConnectClient } from "../../connect/client.js";
-import { validateSourceConfig, validateTargetConfig } from "../../validation.js";
 import { compareHoursOfOperations, getHoursOfOperationDiff, getHoursOfOperationTagDiff } from "./report.js";
 import { createHoursOfOperation, updateHoursOfOperation } from "./operations.js";
 
@@ -20,21 +17,6 @@ export interface CopyHoursOfOperationsOptions {
   sourceProfile: string;
   targetProfile: string;
   verbose: boolean;
-}
-
-
-async function promptContinue(message: string): Promise<boolean> {
-  const rl = createInterface({
-    input: process.stdin,
-    output: process.stdout
-  });
-
-  return new Promise(resolve => {
-    rl.question(`\n${message} (y/n): `, answer => {
-      rl.close();
-      resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
-    });
-  });
 }
 
 
@@ -87,8 +69,8 @@ function displayHoursOfOperationPlan(result: HoursOfOperationComparisonResult, v
         }
         if (action.tagsNeedUpdate) {
           const tagDiff = getHoursOfOperationTagDiff(action.sourceHours, action.targetHours);
-          if (tagDiff.toAdd.length > 0) console.log(`      Tags to add: ${tagDiff.toAdd.join(', ')}`);
-          if (tagDiff.toRemove.length > 0) console.log(`      Tags to remove: ${tagDiff.toRemove.join(', ')}`);
+          if (Object.keys(tagDiff.toAdd).length) console.log(`      Tags to add: ${Object.entries(tagDiff.toAdd).map(([k, v]) => `${k}=${v}`).join(', ')}`);
+          if (tagDiff.toRemove.length) console.log(`      Tags to remove: ${tagDiff.toRemove.join(', ')}`);
         }
       }
     }
@@ -100,8 +82,8 @@ function displayHoursOfOperationPlan(result: HoursOfOperationComparisonResult, v
       console.log(`  - ${action.hoursName}`);
       if (action.targetHours) {
         const tagDiff = getHoursOfOperationTagDiff(action.sourceHours, action.targetHours);
-        if (tagDiff.toAdd.length > 0) console.log(`      Tags to add: ${tagDiff.toAdd.join(', ')}`);
-        if (tagDiff.toRemove.length > 0) console.log(`      Tags to remove: ${tagDiff.toRemove.join(', ')}`);
+        if (Object.keys(tagDiff.toAdd).length) console.log(`      Tags to add: ${Object.entries(tagDiff.toAdd).map(([k, v]) => `${k}=${v}`).join(', ')}`);
+        if (tagDiff.toRemove.length) console.log(`      Tags to remove: ${tagDiff.toRemove.join(', ')}`);
       }
     }
   }
@@ -129,7 +111,7 @@ async function executeHoursOfOperationCopy(targetClient: ConnectClient, targetIn
         const hours = action.sourceHours;
         console.log(`  TimeZone: ${hours.TimeZone}`);
         if (hours.Description) console.log(`  Description: ${hours.Description}`);
-        if (hours.Config && hours.Config.length > 0) {
+        if (hours.Config?.length) {
           console.log(`  Schedule:`);
           for (const config of hours.Config) {
             const start = `${String(config.StartTime!.Hours).padStart(2, '0')}:${String(config.StartTime!.Minutes).padStart(2, '0')}`;
@@ -137,8 +119,8 @@ async function executeHoursOfOperationCopy(targetClient: ConnectClient, targetIn
             console.log(`    ${config.Day}: ${start}-${end}`);
           }
         }
-        if (hours.Tags && Object.keys(hours.Tags).length > 0) {
-          console.log(`  Tags: ${Object.entries(hours.Tags).map(([k, v]) => `${k}=${v}`).join(', ')}`);
+        if (Object.keys(hours.Tags ?? {}).length) {
+          console.log(`  Tags: ${Object.entries(hours.Tags!).map(([k, v]) => `${k}=${v}`).join(', ')}`);
         }
       }
       await createHoursOfOperation(targetClient, targetInstanceId, {
@@ -172,44 +154,9 @@ async function executeHoursOfOperationCopy(targetClient: ConnectClient, targetIn
     if (action.tagsNeedUpdate) {
       console.log(`Updating tags for hours of operation: ${action.hoursName}`);
 
-      const sourceTags = action.sourceHours.Tags ?? {};
-      const targetTags = action.targetHours?.Tags ?? {};
+      const { toAdd, toRemove } = CliUtil.getRecordDiff(action.sourceHours.Tags, action.targetHours?.Tags);
 
-      const tagsToAdd: Record<string, string> = {};
-      for (const [key, value] of Object.entries(sourceTags)) {
-        if (targetTags[key] !== value) {
-          tagsToAdd[key] = value;
-        }
-      }
-
-      const tagsToRemove = Object.keys(targetTags).filter(key => !(key in sourceTags));
-
-      if (verbose) {
-        if (Object.keys(tagsToAdd).length > 0) {
-          console.log(`  Tags to add: ${Object.entries(tagsToAdd).map(([k, v]) => `${k}=${v}`).join(', ')}`);
-        }
-        if (tagsToRemove.length > 0) {
-          console.log(`  Tags to remove: ${tagsToRemove.join(', ')}`);
-        }
-      }
-
-      if (Object.keys(tagsToAdd).length > 0) {
-        await targetClient.send(
-          new TagResourceCommand({
-            resourceArn: action.targetHoursArn!,
-            tags: tagsToAdd
-          })
-        );
-      }
-
-      if (tagsToRemove.length > 0) {
-        await targetClient.send(
-          new UntagResourceCommand({
-            resourceArn: action.targetHoursArn!,
-            tagKeys: tagsToRemove
-          })
-        );
-      }
+      await AwsUtil.updateResourceTags(targetClient, action.targetHoursArn!, toAdd, toRemove);
 
       tagsUpdated++;
     }
@@ -220,21 +167,7 @@ async function executeHoursOfOperationCopy(targetClient: ConnectClient, targetIn
 
 
 export async function copyHoursOfOperations(options: CopyHoursOfOperationsOptions) {
-  const sourceConfigData = await readFile(options.sourceConfig, "utf-8");
-  const targetConfigData = await readFile(options.targetConfig, "utf-8");
-
-  const sourceConfig = validateSourceConfig(JSON.parse(sourceConfigData));
-  const targetConfig = validateTargetConfig(JSON.parse(targetConfigData));
-
-  console.log("Source: " + options.sourceConfig);
-  console.log(`  Instance ID: ${sourceConfig.instanceId}`);
-  console.log(`  Region: ${sourceConfig.region}`);
-  console.log(`  Profile: ${options.sourceProfile}`);
-
-  console.log("\nTarget: " + options.targetConfig);
-  console.log(`  Instance ID: ${targetConfig.instanceId}`);
-  console.log(`  Region: ${targetConfig.region}`);
-  console.log(`  Profile: ${options.targetProfile}`);
+  const { source: sourceConfig, target: targetConfig } = await CliUtil.loadConfigs(options);
 
   const sourceClient = createConnectClient(sourceConfig.region, options.sourceProfile);
   const targetClient = createConnectClient(targetConfig.region, options.targetProfile);
@@ -259,7 +192,7 @@ export async function copyHoursOfOperations(options: CopyHoursOfOperationsOption
     return;
   }
 
-  const shouldContinue = await promptContinue("Proceed with copying hours of operation?");
+  const shouldContinue = await CliUtil.promptContinue("Proceed with copying hours of operation?");
   if (!shouldContinue) {
     console.log("Copy cancelled by user");
     return;

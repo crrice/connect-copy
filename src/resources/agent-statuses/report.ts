@@ -1,5 +1,7 @@
 
 import type { ConnectClient, AgentStatusSummary, AgentStatus } from "@aws-sdk/client-connect";
+
+import * as CliUtil from "../../utils/cli-utils.js";
 import { listAgentStatuses } from "../../connect/resources.js";
 import { matchesFlowFilters } from "../../filters.js";
 import { describeAgentStatus } from "./operations.js";
@@ -9,12 +11,11 @@ import type { SourceConfig } from "../../validation.js";
 
 export interface AgentStatusAction {
   statusName: string;
-  action: 'create' | 'update' | 'skip';
+  action: "create" | "update_all" | "update_tags" | "update_data" | "skip";
   sourceStatus: AgentStatus;
   targetStatus?: AgentStatus;
   targetStatusId?: string;
   targetStatusArn?: string;
-  tagsNeedUpdate?: boolean;
 }
 
 
@@ -44,19 +45,7 @@ function agentStatusContentMatches(source: AgentStatus, target: AgentStatus): bo
 
 
 function agentStatusTagsMatch(source: AgentStatus, target: AgentStatus): boolean {
-  const sourceTags = source.Tags ?? {};
-  const targetTags = target.Tags ?? {};
-
-  const sourceKeys = Object.keys(sourceTags).sort();
-  const targetKeys = Object.keys(targetTags).sort();
-
-  if (sourceKeys.length !== targetKeys.length) return false;
-
-  for (const key of sourceKeys) {
-    if (sourceTags[key] !== targetTags[key]) return false;
-  }
-
-  return true;
+  return CliUtil.recordsMatch(source.Tags, target.Tags);
 }
 
 
@@ -80,26 +69,8 @@ export function getAgentStatusDiff(source: AgentStatus, target: AgentStatus): st
 }
 
 
-export function getAgentStatusTagDiff(source: AgentStatus, target: AgentStatus): { toAdd: string[]; toRemove: string[] } {
-  const sourceTags = source.Tags ?? {};
-  const targetTags = target.Tags ?? {};
-
-  const toAdd: string[] = [];
-  const toRemove: string[] = [];
-
-  for (const [key, value] of Object.entries(sourceTags)) {
-    if (targetTags[key] !== value) {
-      toAdd.push(`${key}=${value}`);
-    }
-  }
-
-  for (const key of Object.keys(targetTags)) {
-    if (!(key in sourceTags)) {
-      toRemove.push(key);
-    }
-  }
-
-  return { toAdd, toRemove };
+export function getAgentStatusTagDiff(source: AgentStatus, target: AgentStatus): { toAdd: Record<string, string>; toRemove: string[] } {
+  return CliUtil.getRecordDiff(source.Tags, target.Tags);
 }
 
 
@@ -149,36 +120,26 @@ export async function compareAgentStatuses(sourceClient: ConnectClient, targetCl
     const contentMatches = agentStatusContentMatches(sourceStatusFull, targetStatusFull);
     const tagsMatch = agentStatusTagsMatch(sourceStatusFull, targetStatusFull);
 
-    if (contentMatches && tagsMatch) {
-      actions.push({
-        statusName,
-        action: 'skip',
-        sourceStatus: sourceStatusFull,
-        targetStatus: targetStatusFull,
-        targetStatusId: targetStatus.Id!,
-        targetStatusArn: targetStatus.Arn!
-      });
-    } else if (contentMatches && !tagsMatch) {
-      actions.push({
-        statusName,
-        action: 'skip',
-        sourceStatus: sourceStatusFull,
-        targetStatus: targetStatusFull,
-        targetStatusId: targetStatus.Id!,
-        targetStatusArn: targetStatus.Arn!,
-        tagsNeedUpdate: true
-      });
+    let actionType: "update_all" | "update_tags" | "update_data" | "skip";
+    if (!contentMatches && !tagsMatch) {
+      actionType = "update_all";
+    } else if (!contentMatches) {
+      actionType = "update_data";
+    } else if (!tagsMatch) {
+      actionType = "update_tags";
     } else {
-      actions.push({
-        statusName,
-        action: 'update',
-        sourceStatus: sourceStatusFull,
-        targetStatus: targetStatusFull,
-        targetStatusId: targetStatus.Id!,
-        targetStatusArn: targetStatus.Arn!,
-        tagsNeedUpdate: !tagsMatch
-      });
+      actionType = "skip";
     }
+
+    const action: AgentStatusAction = {
+      statusName,
+      action: actionType,
+      sourceStatus: sourceStatusFull,
+      targetStatus: targetStatusFull
+    };
+    if (targetStatus.Id !== undefined) action.targetStatusId = targetStatus.Id;
+    if (targetStatus.Arn !== undefined) action.targetStatusArn = targetStatus.Arn;
+    actions.push(action);
   }
 
   return {
