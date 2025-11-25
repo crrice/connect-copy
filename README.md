@@ -15,6 +15,7 @@ Note: When we say "resources" in this project, we specifically mean the supporti
 ## Features
 
 - **Safe by Design**: Read-only access to source, writes to target only after explicit confirmation
+- **Injective Operation**: Copies source to target without deleting extras in target
 - **Cross-Account Support**: Copy between different AWS accounts and regions
 - **Smart Validation**: Validates all dependencies before making any changes
 - **Idempotent**: Safe to re-run after partial failures
@@ -190,6 +191,10 @@ These resources **cannot** be automatically matched and must exist in target:
 - Task templates
 
 **Important**: If the tool finds references to target resources that don't exist, it will report an error and exit. You must create these resources in the target instance before running the tool.
+
+### Tag Handling
+
+Resources are copied injectively (extras in target preserved), but **tags are updated bijectively** - tags on updated resources match source exactly (added, removed, or changed as needed).
 
 ## Output Files
 

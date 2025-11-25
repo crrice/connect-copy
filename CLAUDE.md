@@ -3,6 +3,8 @@
 ## Project Overview
 Tool to copy contact flows from one Amazon Connect instance to another (e.g., dev → prod), written in TypeScript. Instances may be in the same or different AWS accounts.
 
+This tool performs injective (not bijective) operations - it copies source resources to target but never deletes extras from target.
+
 ## Resources to Copy
 
 ### Identifiable by Name (straightforward mapping)
@@ -14,7 +16,7 @@ Tool to copy contact flows from one Amazon Connect instance to another (e.g., de
 - Contact flow modules
 - Quick connects
 - Agent statuses ✅ (implemented)
-- Security profiles
+- Security profiles ✅ (implemented)
 - User hierarchy groups ✅ (implemented)
 - Views ✅ (implemented)
 
@@ -50,6 +52,10 @@ Tool to copy contact flows from one Amazon Connect instance to another (e.g., de
    - Sync resources in dependency order (modules before flows)
    - Apply two-pass approach for circular dependencies
    - Generate output mapping file (timestamp-based JSON for audit)
+
+### Tag Handling
+
+Resources are copied injectively (extras in target preserved), but tags are updated bijectively - tags on updated resources match source exactly (added, removed, or changed as needed).
 
 ### Two-Pass Approach (Circular Dependency Resolution)
 
@@ -107,6 +113,7 @@ Tool requires two config files:
 - `agentStatusFilters` - Optional include/exclude patterns for agent status selection
 - `hoursFilters` - Optional include/exclude patterns for hours of operation selection
 - `hierarchyGroupFilters` - Optional include/exclude patterns for hierarchy group selection
+- `securityProfileFilters` - Optional include/exclude patterns for security profile selection
 
 **Target config** (required fields):
 - `instanceId` - Amazon Connect instance ID
@@ -207,6 +214,21 @@ Options:
 - `--verbose` (optional) - Show detailed per-group comparison results
 
 Note: Hierarchy groups have parent-child relationships. The tool validates that all parent groups are included if child groups are selected by filters. Groups with parent mismatches require the `--force-hierarchy-recreate` flag to proceed with deletion and recreation.
+
+**Copy Security Profiles Command** - Copy security profiles:
+```bash
+connect-flow-copy copy-security-profiles \
+  --source-config <path> \
+  --target-config <path> \
+  --source-profile <profile> \
+  --target-profile <profile> \
+  [--verbose]
+```
+
+Options:
+- `--verbose` (optional) - Show detailed per-profile comparison results
+
+Note: Security profiles include permissions, access control settings, and hierarchy group restrictions. The tool compares all fields including permissions (order-independent), AllowedAccessControlTags, TagRestrictedResources, HierarchyRestrictedResources, and AllowedAccessControlHierarchyGroupId. The APPLICATIONS field cannot be copied via AWS API and must be configured manually in the console after copying.
 
 ## Key Considerations
 
