@@ -16,6 +16,8 @@ export interface SourceConfig {
   hoursFilters?: FilterConfig;
   hierarchyGroupFilters?: FilterConfig;
   securityProfileFilters?: FilterConfig;
+  queueFilters?: FilterConfig;
+  routingProfileFilters?: FilterConfig;
 }
 
 export interface FilterConfig {
@@ -210,7 +212,9 @@ const SourceConfigValidator = V.shape({
   agentStatusFilters: FilterValidator.optional,
   hoursFilters: FilterValidator.optional,
   hierarchyGroupFilters: FilterValidator.optional,
-  securityProfileFilters: FilterValidator.optional
+  securityProfileFilters: FilterValidator.optional,
+  queueFilters: FilterValidator.optional,
+  routingProfileFilters: FilterValidator.optional
 }).noextra;
 
 

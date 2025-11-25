@@ -1,24 +1,87 @@
+
 # Project Preferences
 
 ## Project Overview
+
 Tool to copy contact flows from one Amazon Connect instance to another (e.g., dev → prod), written in TypeScript. Instances may be in the same or different AWS accounts.
 
 This tool performs injective (not bijective) operations - it copies source resources to target but never deletes extras from target.
+
+## Development Setup
+
+### Test Instances
+
+| Instance | Config File | AWS Profile |
+|----------|-------------|-------------|
+| Thunderdome (source) | `config/thunderdome-config.json` | `personal` |
+| Sandbox (target) | `config/sandbox-config.json` | `personal` |
+
+### Build Commands
+
+```bash
+npm run build          # Compile TypeScript
+npx tsc --noEmit       # Type check only
+node dist/index.js     # Run CLI
+```
+
+### Testing a Resource Copy Script
+
+1. Create test resources in source instance with various configurations
+2. Run command with `--verbose` to see comparison details
+3. Pipe output to file for review: `node dist/index.js copy-<resource> ... > test.txt`
+4. Confirm copy, then verify in AWS Console
+5. Re-run to confirm idempotency (should show "no changes needed")
+
+## Resource Implementation Status
+
+| Resource | Status | Notes |
+|----------|--------|-------|
+| Hours of Operation | ✅ Done | Consider refactoring to ResourceComparisonConfig pattern |
+| Agent Statuses | ✅ Done | Consider refactoring to ResourceComparisonConfig pattern |
+| User Hierarchy Groups | ✅ Done | Has `--force-hierarchy-recreate` flag |
+| Security Profiles | ✅ Done | APPLICATIONS field requires manual config |
+| Queues | ✅ Done | Has `--skip-outbound-flow` flag |
+| Views | ✅ Done | Has `--include-aws-managed` flag |
+| Flows & Modules | ✅ Done | Main copy command, uses two-pass approach |
+| Quick Connects | ❌ Todo | |
+| Routing Profiles | ❌ Todo | |
+| Prompts | ❌ Todo | Audio file handling |
+
+### Resource Script Pattern
+
+Each resource has three files in `src/resources/<resource>/`:
+- `operations.ts` - AWS SDK wrappers (list, describe, create, update)
+- `report.ts` - Comparison logic, builds action list
+- `copy.ts` - Orchestration (load configs, compare, confirm, execute)
+
+Newer scripts (hierarchy-groups, security-profiles, queues) use `ResourceComparisonConfig` interface for standardized comparison. Older scripts (agent-statuses, hours-of-operation) could be refactored to this pattern.
+
+## Resource Dependencies
+
+Copy resources in this order to satisfy dependencies:
+
+1. **Hours of Operation** - No dependencies
+2. **Agent Statuses** - No dependencies
+3. **User Hierarchy Groups** - No dependencies
+4. **Security Profiles** - Depends on hierarchy groups (for restrictions)
+5. **Queues** - Depends on hours of operation, optionally flows (for outbound whisper)
+6. **Views** - No dependencies
+7. **Flows & Modules** - Depends on queues, views, and all other resources
 
 ## Resources to Copy
 
 ### Identifiable by Name (straightforward mapping)
 - Queues
 - Routing profiles
-- Hours of operation ✅ (implemented)
+- Hours of operation
 - Prompts (audio recordings)
 - Contact flows
 - Contact flow modules
 - Quick connects
-- Agent statuses ✅ (implemented)
-- Security profiles ✅ (implemented)
-- User hierarchy groups ✅ (implemented)
-- Views ✅ (implemented)
+- Agent statuses
+- Security profiles
+- User hierarchy groups
+- Views
 
 ### Environment-Specific Resources (must pre-exist in target)
 - **Lambda functions** - ARNs differ across accounts/regions, must exist in target
@@ -66,19 +129,6 @@ Resources are copied injectively (extras in target preserved), but tags are upda
 1. **Pass 1 - Create Stub Flows**
    - Create all flows in target with minimal valid content
    - Use `Status=SAVED` to skip validation of ARN references
-   - Stub flow structure:
-     ```json
-     {
-       "Version": "2019-10-30",
-       "StartAction": "<disconnect-block-id>",
-       "Metadata": {},
-       "Actions": [{
-         "Identifier": "<disconnect-block-id>",
-         "Type": "DisconnectParticipant",
-         "Parameters": {}
-       }]
-     }
-     ```
    - Obtain ARNs for all target flows
    - Build mapping: `sourceFlowArn → targetFlowArn`
 
@@ -94,166 +144,40 @@ Resources are copied injectively (extras in target preserved), but tags are upda
 - `PublishContactFlow` - activates updated flow
 - Similar operations for modules: `CreateContactFlowModule`, `UpdateContactFlowModuleContent`
 
-## Technical Stack
-- TypeScript
-- AWS SDK v3
-- Target: CLI tool
+## CLI Commands
 
-## CLI Usage
-
-### Configuration Files
-Tool requires two config files:
-
-**Source config** (required fields):
-- `instanceId` - Amazon Connect instance ID
-- `region` - AWS region
-- `flowFilters` - Optional include/exclude patterns for flow selection
-- `moduleFilters` - Optional include/exclude patterns for module selection
-- `viewFilters` - Optional include/exclude patterns for view selection
-- `agentStatusFilters` - Optional include/exclude patterns for agent status selection
-- `hoursFilters` - Optional include/exclude patterns for hours of operation selection
-- `hierarchyGroupFilters` - Optional include/exclude patterns for hierarchy group selection
-- `securityProfileFilters` - Optional include/exclude patterns for security profile selection
-
-**Target config** (required fields):
-- `instanceId` - Amazon Connect instance ID
-- `region` - AWS region
-
-**Note**: Filters only apply to the source config. They determine which resources to select from the source instance. The target config only specifies the destination instance.
-
-### Commands
-
-**Main Copy Command**
-```bash
-connect-flow-copy copy \
-  --source-config <path> \
-  --target-config <path> \
-  --source-profile <profile> \
-  --target-profile <profile> \
-  [--no-publish] \
-  [--verbose]
-```
-
-Options:
-- `--source-config` (required) - Path to source config JSON
-- `--target-config` (required) - Path to target config JSON
-- `--source-profile` (required) - AWS profile for source account
-- `--target-profile` (required) - AWS profile for target account
-- `--no-publish` (optional) - Keep all flows as SAVED regardless of source state
+All commands share these required options:
+- `--source-config <path>` - Path to source config JSON
+- `--target-config <path>` - Path to target config JSON
+- `--source-profile <profile>` - AWS profile for source account
+- `--target-profile <profile>` - AWS profile for target account
 - `--verbose` (optional) - Enable detailed logging
 
-**Report Command** - Validate without copying:
-```bash
-connect-flow-copy report \
-  --source-config <path> \
-  --target-config <path> \
-  --source-profile <profile> \
-  --target-profile <profile> \
-  [--resources-only] \
-  [--verbose]
-```
+### Configuration Files
 
-Options:
-- `--resources-only` (optional) - Only report resource differences, skip flow validation
-- `--verbose` (optional) - Show detailed per-flow comparison results
+**Source config**:
+- `instanceId` - Amazon Connect instance ID
+- `region` - AWS region
+- `*Filters` - Optional include/exclude patterns (flowFilters, moduleFilters, viewFilters, agentStatusFilters, hoursFilters, hierarchyGroupFilters, securityProfileFilters, queueFilters)
 
-**Copy Views Command** - Copy views separately:
-```bash
-connect-flow-copy copy-views \
-  --source-config <path> \
-  --target-config <path> \
-  --source-profile <profile> \
-  --target-profile <profile> \
-  [--include-aws-managed] \
-  [--verbose]
-```
+**Target config**:
+- `instanceId` - Amazon Connect instance ID
+- `region` - AWS region
 
-Options:
-- `--include-aws-managed` (optional) - Include AWS managed views (default: skip)
-- `--verbose` (optional) - Show detailed per-view comparison results
+Note: Filters only apply to source config.
 
-**Copy Agent Statuses Command** - Copy custom agent statuses:
-```bash
-connect-flow-copy copy-agent-statuses \
-  --source-config <path> \
-  --target-config <path> \
-  --source-profile <profile> \
-  --target-profile <profile> \
-  [--verbose]
-```
+### Command Reference
 
-Options:
-- `--verbose` (optional) - Show detailed per-status comparison results
-
-**Copy Hours of Operation Command** - Copy hours of operation:
-```bash
-connect-flow-copy copy-hours-of-operation \
-  --source-config <path> \
-  --target-config <path> \
-  --source-profile <profile> \
-  --target-profile <profile> \
-  [--verbose]
-```
-
-Options:
-- `--verbose` (optional) - Show detailed per-hours comparison results
-
-**Copy Hierarchy Groups Command** - Copy user hierarchy groups:
-```bash
-connect-flow-copy copy-hierarchy-groups \
-  --source-config <path> \
-  --target-config <path> \
-  --source-profile <profile> \
-  --target-profile <profile> \
-  [--force-hierarchy-recreate] \
-  [--verbose]
-```
-
-Options:
-- `--force-hierarchy-recreate` (optional) - Allow deleting and recreating groups with parent mismatches (WARNING: permanently severs historical contact data)
-- `--verbose` (optional) - Show detailed per-group comparison results
-
-Note: Hierarchy groups have parent-child relationships. The tool validates that all parent groups are included if child groups are selected by filters. Groups with parent mismatches require the `--force-hierarchy-recreate` flag to proceed with deletion and recreation.
-
-**Copy Security Profiles Command** - Copy security profiles:
-```bash
-connect-flow-copy copy-security-profiles \
-  --source-config <path> \
-  --target-config <path> \
-  --source-profile <profile> \
-  --target-profile <profile> \
-  [--verbose]
-```
-
-Options:
-- `--verbose` (optional) - Show detailed per-profile comparison results
-
-Note: Security profiles include permissions, access control settings, and hierarchy group restrictions. The tool compares all fields including permissions (order-independent), AllowedAccessControlTags, TagRestrictedResources, HierarchyRestrictedResources, and AllowedAccessControlHierarchyGroupId. The APPLICATIONS field cannot be copied via AWS API and must be configured manually in the console after copying.
-
-## Key Considerations
-
-### Resource Matching & Dependencies
-- Resources matched by **name**, not ARN (queues, prompts, flows, modules, etc.)
-- Environment-specific resources (Lambdas, Lex bots) must pre-exist in target - tool validates presence
-- Flow modules synced before flows (flows may reference modules)
-- Flow modules have same circular dependency issues as flows
-
-### Idempotency & Safety
-- Tool is **idempotent** - safe to re-run after partial failures
-- Read-only access to source instance
-- Target writes only after explicit user confirmation
-- Skips creating resources that already exist
-- Skips updating flows with matching content
-
-### Flow State & Publishing
-- Flows can be in SAVED (draft) state before publishing
-- Tool preserves flow state (SAVED/PUBLISHED) from source unless `--no-publish` flag used
-- Preserves flow descriptions, metadata, and tags
-- ARN validation may occur during content update
-
-### Flow Filtering
-- Config file supports include/exclude patterns (e.g., `Test_*`, `Draft_*`)
-- Enables selective copying of flows matching specific patterns
+| Command | Extra Options | Notes |
+|---------|---------------|-------|
+| `copy` | `--no-publish` | Main flow/module copy |
+| `report` | `--resources-only` | Validate without copying |
+| `copy-hours-of-operation` | | |
+| `copy-agent-statuses` | | System statuses excluded |
+| `copy-hierarchy-groups` | `--force-hierarchy-recreate` | WARNING: severs historical data |
+| `copy-security-profiles` | | APPLICATIONS requires manual config |
+| `copy-queues` | `--skip-outbound-flow` | STANDARD only; phone/email manual |
+| `copy-views` | `--include-aws-managed` | |
 
 ## Known Limitations
 
@@ -267,7 +191,11 @@ Note: Security profiles include permissions, access control settings, and hierar
 - If tool encounters a CAMPAIGN flow, it will fail with error: `Unsupported flow type: CAMPAIGN`
 - To add support: Enable Outbound Campaigns in test instance and create template at `templates/flows/default-campaign-content.json`
 
-GENERAL CODE STYLE:
+---
+
+## Code Style Guide
+
+### General Principles
 - Keep code as simple and short as possible - no unnecessary error handling or unused references
 - Remove try/catch blocks, unused imports, and unnecessary helper functions unless explicitly requested
 - Match the existing code's naming patterns above all else - consistency with current code trumps style preferences
@@ -277,68 +205,68 @@ GENERAL CODE STYLE:
 - No comments unless explicitly requested or genuinely complex logic requires explanation
 - Use descriptive variable names that naturally indicate their contents through word choice (e.g., `tableName` vs `tableArn`, `userCount` vs `users`)
 
-JAVASCRIPT/TYPESCRIPT PREFERENCES:
-- When using AWS SDK, use the latest version (v3)
-- Use all modern JavaScript features - no need for backward compatibility
+### TypeScript Conventions
+- AWS SDK v3, all modern JavaScript features
 - Use function declaration style (e.g., `function myFunction()`) instead of arrow functions for named functions
-- Avoid default exports - prefer named exports (e.g., `export function myFunction()` instead of `export default myFunction`)
+- Named exports only (no default exports)
 - All hand-written source files should start and end with a newline (blank first and last lines)
 - Functions should have two blank lines before them
-- Use SCREAMING_SNAKE_CASE for constants that mirror environment variable names (e.g., `const TABLE_NAME = process.env.TABLE_NAME`) when writing new code
+- Use SCREAMING_SNAKE_CASE for constants that mirror environment variable names
 - Choose quote style based on fewest escapes needed. When escapes are equal, prefer double quotes, then single quotes, then backticks
 - Keep console output inspectable - pass objects directly rather than interpolating them into strings
-- Avoid importing non-standard packages unless absolutely needed or explicitly requested
-- NEVER use the `any` type - TypeScript is strongly typed for a reason. If you encounter a situation where `any` seems necessary, STOP and ask the user for guidance on proper typing. The user is a TypeScript expert and will provide the correct approach. Acceptable alternatives: `unknown` (for truly unknown types that will be narrowed), proper interface definitions, or generic type parameters.
-- Use `type[]` syntax instead of `Array<type>` for array types - it's more concise and the standard TypeScript convention (e.g., `string[]` not `Array<string>`)
-- Separate type imports from runtime imports using `import type`, with a blank line between them when both are multiline:
-  ```typescript
-  import { SomeCommand, AnotherCommand } from "@aws-sdk/client-connect";
+- Avoid importing non-standard packages unless absolutely needed
+- NEVER use the `any` type - use `unknown`, proper interfaces, or generic type parameters instead
+- Use `type[]` syntax instead of `Array<type>`
+- Separate type imports from runtime imports using `import type`
+- Keep function signatures on a single line even if long
+- Single-line conditionals for simple control flow: `if (!name) continue;`
+- Use liberal vertical whitespace
+- Avoid excessive destructuring when reading from a variable is clearer
+- Prefer type inference when runtime values are the source of truth
+- Reuse types via `typeof` where appropriate
 
-  import type { SomeType, AnotherType } from "@aws-sdk/client-connect";
-  ```
-  Single-line imports from same source don't need blank line separation.
-- Keep function signatures on a single line even if long (name, parameters, return type all together)
-- Single-line conditionals for simple control flow - when condition is short and action is a single keyword (return, continue, break), write on one line without braces:
-  ```typescript
-  if (!name || !sourceArn) continue;
-  ```
-- Use liberal vertical whitespace - add blank lines before naked keywords or short statements so they stand out, especially control flow keywords after multi-line blocks
-- Avoid excessive destructuring in loops or function parameters when reading from a variable is clearer - prefer `resourcePair.source` over destructuring `{ source }` if properties are used multiple times
-- Prefer type inference when runtime values are the source of truth - avoid explicit type annotations that duplicate runtime structure
-- Reuse types via `typeof` where appropriate to maintain single source of truth (e.g., `function foo(options: typeof configObject)`)
+### Code Organization
+- Story-style ordering - main exports at top, helpers below in order of use
+- Export interface immediately above its primary function
+- Separation of concerns - API wrappers (`operations.ts`) separate from logic (`report.ts`)
+- Minimize definition-to-use distance
 
-COMMUNICATION STYLE:
-- Avoid unnecessary praise or validation phrases like "Great catch!", "Good question!", "Excellent observation!" unless genuinely warranted
-- Use neutral, professional transitions: "Let's evaluate this", "Let's step through it", "Here's the situation"
+### Naming and Data
+- Single Name Principle - all things should go by only one name
+- Cross-instance clarity - variables must indicate instance (e.g., `sourceGroup`, `targetParentName`)
+- Objects > Maps - use `Record<K, V>` unless non-string keys required
+- Arrays > Sets - use arrays unless Set operations genuinely needed
+
+### Error Handling
+- Exceptions are for exceptional circumstances only - never for normal control flow
+- Predictable failures return explicit states or empty results
+- Show all failures - collect violations, don't fail on first
+- Early returns for validation
+
+### Git Commit Messages
+- Natural English sentences (not conventional commit types)
+- Start with capital letter and end with period
+- Format: Subject line, blank line, optional body with details
+- Body should provide context using bullet points or paragraphs
+
+---
+
+## AI Behavior Instructions
+
+### Communication Style
+- Avoid unnecessary praise or validation phrases unless genuinely warranted
+- Use neutral, professional transitions: "Let's evaluate this", "Let's step through it"
 - Be direct and factual in responses
 - Reserve positive feedback for genuinely exceptional insights or critical corrections
 
-CODE MODIFICATIONS - CRITICAL:
+### Code Modifications - CRITICAL
 - NEVER modify existing code unless EXPLICITLY and CLEARLY instructed
-- Questions like "Can you modify?", "Could you change?", "What if we changed?", "Would it be better if?", "Is it possible to?" are NOT instructions to modify
-- For such questions, ONLY describe the changes in text/chat - do NOT produce modified code or update artifacts
-- Only produce modified code when seeing direct commands: "Please modify", "Change the code", "Update the function", "Make this change", "Rewrite this", "Add this feature"
-- If I suggest a modification and you reply with "yes", "do it", "go ahead", or similar affirmative responses, treat that as an explicit instruction to make the change
-- When extracting code to functions, move ONLY what's explicitly requested - no extra features, improvements, or "while we're at it" changes
+- Questions like "Can you modify?", "Could you change?", "What if we changed?" are NOT instructions to modify
+- For such questions, ONLY describe the changes in text - do NOT produce modified code
+- Only produce modified code when seeing direct commands: "Please modify", "Change the code", "Update the function", "Make this change"
+- If I suggest a modification and you reply with "yes", "do it", "go ahead", treat that as an explicit instruction
+- When extracting code to functions, move ONLY what's explicitly requested - no extra changes
 - If instructions are unclear, ASK before modifying anything
-- Prefer localized changes over distributed modifications - single insertion/replacement when possible
-- When showing code for the first time in a conversation, show the complete code. For subsequent modifications, you may show just the modified portions if the code is very long
-- Even when I say something "doesn't work" or "has an error", do not modify code unless I explicitly ask for the modification
+- Prefer localized changes over distributed modifications
+- Even when I say something "doesn't work" or "has an error", do not modify code unless I explicitly ask
 
-GIT COMMIT MESSAGE FORMAT:
-- Use natural English sentences (not conventional commit types like "feat:", "fix:", etc.)
-- Start with a capital letter and end with punctuation (period)
-- Format: `<Subject line>.` followed by blank line, then optional body with details
-- Subject line should describe what the commit does in imperative mood when possible
-- Body should provide context using bullet points or paragraphs
-- Use markdown formatting in body when helpful (code blocks, lists, bold/italic)
-- Examples:
-  ```
-  Add flow filtering with pattern matching.
-
-  Implements `matchesFlowFilters()` using minimatch for glob-style include/exclude patterns (e.g., "Test_*", "Draft_*").
-  ```
-
-  ```
-  Initial commit.
-  ```

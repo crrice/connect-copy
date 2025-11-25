@@ -8,6 +8,8 @@ import { copyAgentStatuses } from "./resources/agent-statuses/copy.js";
 import { copyHoursOfOperations } from "./resources/hours-of-operation/copy.js";
 import { copyHierarchyGroups } from "./resources/hierarchy-groups/copy.js";
 import { copySecurityProfiles } from "./resources/security-profiles/copy.js";
+import { copyQueues } from "./resources/queues/copy.js";
+import { copyRoutingProfiles } from "./resources/routing-profiles/copy.js";
 import { runReport } from "./report.js";
 
 const program = new Command();
@@ -112,6 +114,33 @@ program
   .action((options) => {
     setCliFlags({ publish: true, yes: false, verbose: options.verbose });
     copySecurityProfiles(options);
+  });
+
+program
+  .command("copy-queues")
+  .description("Copy queues between instances")
+  .requiredOption("--source-config <path>", "Path to source configuration file")
+  .requiredOption("--target-config <path>", "Path to target configuration file")
+  .requiredOption("--source-profile <profile>", "AWS profile for source account")
+  .requiredOption("--target-profile <profile>", "AWS profile for target account")
+  .option("--skip-outbound-flow", "Skip outbound whisper flow configuration", false)
+  .option("--verbose", "Enable detailed logging", false)
+  .action((options) => {
+    setCliFlags({ publish: true, yes: false, verbose: options.verbose });
+    copyQueues(options);
+  });
+
+program
+  .command("copy-routing-profiles")
+  .description("Copy routing profiles between instances")
+  .requiredOption("--source-config <path>", "Path to source configuration file")
+  .requiredOption("--target-config <path>", "Path to target configuration file")
+  .requiredOption("--source-profile <profile>", "AWS profile for source account")
+  .requiredOption("--target-profile <profile>", "AWS profile for target account")
+  .option("--verbose", "Enable detailed logging", false)
+  .action((options) => {
+    setCliFlags({ publish: true, yes: false, verbose: options.verbose });
+    copyRoutingProfiles(options);
   });
 
 program.parse();

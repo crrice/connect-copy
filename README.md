@@ -49,7 +49,15 @@ Create two configuration files: one for source and one for target instance.
 **Configuration Fields:**
 - `instanceId` - Amazon Connect instance ID (UUID format, lowercase required)
 - `region` - AWS region (e.g., "us-east-1", "us-west-2")
-- `flowFilters`, `moduleFilters`, `viewFilters` - Optional filter patterns (source only)
+- Filter patterns (source config only):
+  - `flowFilters` - Filter contact flows
+  - `moduleFilters` - Filter flow modules
+  - `viewFilters` - Filter views
+  - `agentStatusFilters` - Filter agent statuses
+  - `hoursFilters` - Filter hours of operation
+  - `hierarchyGroupFilters` - Filter user hierarchy groups
+  - `securityProfileFilters` - Filter security profiles
+  - `queueFilters` - Filter queues
 
 ### Source Configuration (`source-config.json`)
 
@@ -287,6 +295,123 @@ connect-flow-copy \
   --target-profile default \
   --no-publish
 ```
+
+## Resource Copy Commands
+
+In addition to the main flow copy command, the tool provides separate commands for copying supporting resources. These should be run before copying flows to ensure all dependencies exist in the target.
+
+### Recommended Order
+
+1. `copy-hours-of-operation` - No dependencies
+2. `copy-agent-statuses` - No dependencies
+3. `copy-hierarchy-groups` - No dependencies
+4. `copy-security-profiles` - Depends on hierarchy groups
+5. `copy-queues` - Depends on hours of operation (and optionally flows)
+6. `copy-views` - No dependencies
+7. `copy` (main command) - Copies flows and modules
+
+### Copy Hours of Operation
+
+```bash
+connect-flow-copy copy-hours-of-operation \
+  --source-config ./source-config.json \
+  --target-config ./target-config.json \
+  --source-profile default \
+  --target-profile default \
+  [--verbose]
+```
+
+### Copy Agent Statuses
+
+Copies custom agent statuses (system statuses are not copied).
+
+```bash
+connect-flow-copy copy-agent-statuses \
+  --source-config ./source-config.json \
+  --target-config ./target-config.json \
+  --source-profile default \
+  --target-profile default \
+  [--verbose]
+```
+
+### Copy User Hierarchy Groups
+
+```bash
+connect-flow-copy copy-hierarchy-groups \
+  --source-config ./source-config.json \
+  --target-config ./target-config.json \
+  --source-profile default \
+  --target-profile default \
+  [--force-hierarchy-recreate] \
+  [--verbose]
+```
+
+Options:
+- `--force-hierarchy-recreate` - Allow deleting and recreating groups with parent mismatches (WARNING: permanently severs historical contact data)
+
+### Copy Security Profiles
+
+```bash
+connect-flow-copy copy-security-profiles \
+  --source-config ./source-config.json \
+  --target-config ./target-config.json \
+  --source-profile default \
+  --target-profile default \
+  [--verbose]
+```
+
+Note: The APPLICATIONS field cannot be copied via AWS API and must be configured manually.
+
+### Copy Queues
+
+Copies STANDARD queues only (AGENT queues are auto-created by Amazon Connect).
+
+```bash
+connect-flow-copy copy-queues \
+  --source-config ./source-config.json \
+  --target-config ./target-config.json \
+  --source-profile default \
+  --target-profile default \
+  [--skip-outbound-flow] \
+  [--verbose]
+```
+
+Options:
+- `--skip-outbound-flow` - Skip outbound whisper flow configuration (use when flows haven't been copied yet)
+
+Note: Phone numbers and email addresses cannot be copied (environment-specific). Quick connect associations are handled by a separate command.
+
+### Copy Views
+
+```bash
+connect-flow-copy copy-views \
+  --source-config ./source-config.json \
+  --target-config ./target-config.json \
+  --source-profile default \
+  --target-profile default \
+  [--include-aws-managed] \
+  [--verbose]
+```
+
+Options:
+- `--include-aws-managed` - Include AWS managed views (default: skip)
+
+### Report Command
+
+Run validation without making changes:
+
+```bash
+connect-flow-copy report \
+  --source-config ./source-config.json \
+  --target-config ./target-config.json \
+  --source-profile default \
+  --target-profile default \
+  [--resources-only] \
+  [--verbose]
+```
+
+Options:
+- `--resources-only` - Only report resource differences, skip flow validation
 
 ## Troubleshooting
 
