@@ -3,7 +3,7 @@ import * as CliUtil from "../../utils/cli-utils.js";
 import { listHoursOfOperations } from "../../connect/resources.js";
 import { listContactFlows } from "../../connect/flows.js";
 import { matchesFlowFilters } from "../../filters.js";
-import { listStandardQueues, describeQueue } from "./operations.js";
+import { listStandardQueues, listPhoneNumbers, describeQueue } from "./operations.js";
 
 import type { QueueSummary, Queue } from "@aws-sdk/client-connect";
 
@@ -25,10 +25,18 @@ export interface QueueComparisonResult {
 
   hooMapping: Record<string, string>;
   flowMapping: Record<string, string>;
+  phoneMapping: Record<string, string>;
+  queuesWithUnmappedPhones: string[];
 }
 
 
-export async function compareQueues(config: CliUtil.ResourceComparisonConfig, skipOutboundFlow: boolean): Promise<QueueComparisonResult> {
+export interface CompareQueuesOptions {
+  skipOutboundFlow: boolean;
+  phoneNumberMappings?: Record<string, string> | undefined;
+}
+
+
+export async function compareQueues(config: CliUtil.ResourceComparisonConfig, options: CompareQueuesOptions): Promise<QueueComparisonResult> {
   const {
     sourceClient,
     targetClient,
@@ -59,7 +67,7 @@ export async function compareQueues(config: CliUtil.ResourceComparisonConfig, sk
   // Build flow mapping if needed (sourceArn → targetArn)
   const flowMapping: Record<string, string> = {};
 
-  if (!skipOutboundFlow) {
+  if (!options.skipOutboundFlow) {
     const sourceFlows = await listContactFlows(sourceClient, sourceInstanceId);
     const targetFlows = await listContactFlows(targetClient, targetInstanceId);
 
@@ -70,6 +78,52 @@ export async function compareQueues(config: CliUtil.ResourceComparisonConfig, sk
       if (targetMatch) {
         flowMapping[flow.Arn!] = targetMatch.Arn!;
       }
+    }
+  }
+
+  // Build phone number mapping (sourceId → targetId) and validate
+  // Supports both E164 format (+1234567890) and phone number IDs (UUIDs)
+  const phoneMapping: Record<string, string> = {};
+  const sourcePhoneNumbers = await listPhoneNumbers(sourceClient, sourceInstanceId);
+  const targetPhoneNumbers = await listPhoneNumbers(targetClient, targetInstanceId);
+
+  const sourcePhoneById = new Map(sourcePhoneNumbers.map(p => [p.PhoneNumberId, p]));
+  const sourcePhoneByE164 = new Map(sourcePhoneNumbers.map(p => [p.PhoneNumber, p]));
+  const targetPhoneById = new Map(targetPhoneNumbers.map(p => [p.PhoneNumberId, p]));
+  const targetPhoneByE164 = new Map(targetPhoneNumbers.map(p => [p.PhoneNumber, p]));
+
+  if (options.phoneNumberMappings) {
+    const invalidMappings: string[] = [];
+
+    for (const [sourceKey, targetKey] of Object.entries(options.phoneNumberMappings)) {
+      // Resolve source to phone number ID
+      const sourcePhone = sourceKey.startsWith("+")
+        ? sourcePhoneByE164.get(sourceKey)
+        : sourcePhoneById.get(sourceKey);
+
+      // Resolve target to phone number ID
+      const targetPhone = targetKey.startsWith("+")
+        ? targetPhoneByE164.get(targetKey)
+        : targetPhoneById.get(targetKey);
+
+      if (!sourcePhone) {
+        invalidMappings.push(`${sourceKey} (not found in source instance)`);
+      } else if (!targetPhone) {
+        invalidMappings.push(`${sourceKey} → ${targetKey} (target not found)`);
+      } else {
+        phoneMapping[sourcePhone.PhoneNumberId!] = targetPhone.PhoneNumberId!;
+      }
+    }
+
+    if (invalidMappings.length > 0) {
+      console.log("\n⚠️  Validation Error: Invalid phone number mappings\n");
+      console.log("The following phone number mappings are invalid:\n");
+      for (const mapping of invalidMappings) {
+        console.log(`  - ${mapping}`);
+      }
+      console.log("\nCheck your phoneNumberMappings in the source config file.\n");
+
+      return { actions: [], queues: [], hooMapping, flowMapping, phoneMapping, queuesWithUnmappedPhones: [] };
     }
   }
 
@@ -94,11 +148,11 @@ export async function compareQueues(config: CliUtil.ResourceComparisonConfig, sk
     console.log("  • Run copy-hours-of-operation first, OR");
     console.log("  • Exclude these queues using filters in your source config\n");
 
-    return { actions: [], queues: [], hooMapping, flowMapping };
+    return { actions: [], queues: [], hooMapping, flowMapping, phoneMapping, queuesWithUnmappedPhones: [] };
   }
 
   // Validate outbound flow dependencies (if not skipped)
-  if (!skipOutboundFlow) {
+  if (!options.skipOutboundFlow) {
     const queuesWithMissingFlow = sourceQueueDetails.filter(q => {
       const flowArn = q.OutboundCallerConfig?.OutboundFlowId;
       return flowArn && !flowMapping[flowArn];
@@ -122,7 +176,17 @@ export async function compareQueues(config: CliUtil.ResourceComparisonConfig, sk
       console.log("  • Use --skip-outbound-flow flag, OR");
       console.log("  • Exclude these queues using filters in your source config\n");
 
-      return { actions: [], queues: [], hooMapping, flowMapping };
+      return { actions: [], queues: [], hooMapping, flowMapping, phoneMapping, queuesWithUnmappedPhones: [] };
+    }
+  }
+
+  // Track queues with unmapped phone numbers (for warning at end)
+  const queuesWithUnmappedPhones: string[] = [];
+
+  for (const queue of sourceQueueDetails) {
+    const phoneId = queue.OutboundCallerConfig?.OutboundCallerIdNumberId;
+    if (phoneId && !phoneMapping[phoneId]) {
+      queuesWithUnmappedPhones.push(queue.Name);
     }
   }
 
@@ -144,7 +208,7 @@ export async function compareQueues(config: CliUtil.ResourceComparisonConfig, sk
 
     const targetQueue = await describeQueue(targetClient, targetInstanceId, targetQueueSummary.Id!);
 
-    const contentMatches = queueContentMatches(sourceQueue, targetQueue, hooMapping, flowMapping, skipOutboundFlow);
+    const contentMatches = queueContentMatches(sourceQueue, targetQueue, hooMapping, flowMapping, phoneMapping, options.skipOutboundFlow);
     const tagsMatch = CliUtil.recordsMatch(sourceQueue.Tags, targetQueue.Tags);
 
     const actionType = (!contentMatches && !tagsMatch) ? "update_all"
@@ -165,11 +229,11 @@ export async function compareQueues(config: CliUtil.ResourceComparisonConfig, sk
     actions.push(action);
   }
 
-  return { actions, queues: filteredSourceQueues, hooMapping, flowMapping };
+  return { actions, queues: filteredSourceQueues, hooMapping, flowMapping, phoneMapping, queuesWithUnmappedPhones };
 }
 
 
-function queueContentMatches(source: NoUndefinedVals<Queue>, target: NoUndefinedVals<Queue>, hooMapping: Record<string, string>, flowMapping: Record<string, string>, skipOutboundFlow: boolean): boolean {
+function queueContentMatches(source: NoUndefinedVals<Queue>, target: NoUndefinedVals<Queue>, hooMapping: Record<string, string>, flowMapping: Record<string, string>, phoneMapping: Record<string, string>, skipOutboundFlow: boolean): boolean {
   if (source.Description !== target.Description) return false;
   if (source.MaxContacts !== target.MaxContacts) return false;
   if (source.Status !== target.Status) return false;
@@ -177,10 +241,18 @@ function queueContentMatches(source: NoUndefinedVals<Queue>, target: NoUndefined
   // Hours of operation - compare by mapped ID
   if (hooMapping[source.HoursOfOperationId!] !== target.HoursOfOperationId) return false;
 
-  // Outbound caller config - only compare OutboundCallerIdName (phone number is skipped)
+  // Outbound caller config - compare OutboundCallerIdName
   const sourceCallerName = source.OutboundCallerConfig?.OutboundCallerIdName;
   const targetCallerName = target.OutboundCallerConfig?.OutboundCallerIdName;
   if (sourceCallerName !== targetCallerName) return false;
+
+  // Outbound caller ID number - compare by mapped ID (only if mapping exists)
+  const sourcePhoneId = source.OutboundCallerConfig?.OutboundCallerIdNumberId;
+  const targetPhoneId = target.OutboundCallerConfig?.OutboundCallerIdNumberId;
+
+  if (sourcePhoneId && phoneMapping[sourcePhoneId]) {
+    if (phoneMapping[sourcePhoneId] !== targetPhoneId) return false;
+  }
 
   // Outbound flow - compare by mapped ARN (if not skipped)
   if (!skipOutboundFlow) {
@@ -198,7 +270,7 @@ function queueContentMatches(source: NoUndefinedVals<Queue>, target: NoUndefined
 }
 
 
-export function getQueueDiff(source: NoUndefinedVals<Queue>, target: NoUndefinedVals<Queue>, hooMapping: Record<string, string>, flowMapping: Record<string, string>, skipOutboundFlow: boolean): string[] {
+export function getQueueDiff(source: NoUndefinedVals<Queue>, target: NoUndefinedVals<Queue>, hooMapping: Record<string, string>, flowMapping: Record<string, string>, phoneMapping: Record<string, string>, skipOutboundFlow: boolean): string[] {
   const diffs: string[] = [];
 
   if (source.Description !== target.Description) {
@@ -221,6 +293,16 @@ export function getQueueDiff(source: NoUndefinedVals<Queue>, target: NoUndefined
   const targetCallerName = target.OutboundCallerConfig?.OutboundCallerIdName;
   if (sourceCallerName !== targetCallerName) {
     diffs.push(`OutboundCallerIdName: ${targetCallerName ?? "(none)"} → ${sourceCallerName ?? "(none)"}`);
+  }
+
+  // Outbound caller ID number - only show diff if mapping exists
+  const sourcePhoneId = source.OutboundCallerConfig?.OutboundCallerIdNumberId;
+  const targetPhoneId = target.OutboundCallerConfig?.OutboundCallerIdNumberId;
+
+  if (sourcePhoneId && phoneMapping[sourcePhoneId]) {
+    if (phoneMapping[sourcePhoneId] !== targetPhoneId) {
+      diffs.push(`OutboundCallerIdNumberId: changed`);
+    }
   }
 
   if (!skipOutboundFlow) {
@@ -274,7 +356,7 @@ export function displayQueuePlan(result: QueueComparisonResult, verbose: boolean
     for (const action of toUpdateAll) {
       console.log(`  - ${action.queueName}`);
       if (verbose && action.targetQueue) {
-        const diffs = getQueueDiff(action.sourceQueue, action.targetQueue, result.hooMapping, result.flowMapping, false);
+        const diffs = getQueueDiff(action.sourceQueue, action.targetQueue, result.hooMapping, result.flowMapping, result.phoneMapping, false);
         for (const diff of diffs) {
           console.log(`      ${diff}`);
         }
@@ -287,7 +369,7 @@ export function displayQueuePlan(result: QueueComparisonResult, verbose: boolean
     for (const action of toUpdateData) {
       console.log(`  - ${action.queueName}`);
       if (verbose && action.targetQueue) {
-        const diffs = getQueueDiff(action.sourceQueue, action.targetQueue, result.hooMapping, result.flowMapping, false);
+        const diffs = getQueueDiff(action.sourceQueue, action.targetQueue, result.hooMapping, result.flowMapping, result.phoneMapping, false);
         for (const diff of diffs) {
           console.log(`      ${diff}`);
         }

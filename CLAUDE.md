@@ -41,10 +41,10 @@ node dist/index.js     # Run CLI
 | User Hierarchy Groups | ✅ Done | Has `--force-hierarchy-recreate` flag |
 | Security Profiles | ✅ Done | APPLICATIONS field requires manual config |
 | Queues | ✅ Done | Has `--skip-outbound-flow` flag |
+| Routing Profiles | 🔶 Initial | Implemented, needs production testing |
 | Views | ✅ Done | Has `--include-aws-managed` flag |
 | Flows & Modules | ✅ Done | Main copy command, uses two-pass approach |
 | Quick Connects | ❌ Todo | |
-| Routing Profiles | ❌ Todo | |
 | Prompts | ❌ Todo | Audio file handling |
 
 ### Resource Script Pattern
@@ -65,8 +65,9 @@ Copy resources in this order to satisfy dependencies:
 3. **User Hierarchy Groups** - No dependencies
 4. **Security Profiles** - Depends on hierarchy groups (for restrictions)
 5. **Queues** - Depends on hours of operation, optionally flows (for outbound whisper)
-6. **Views** - No dependencies
-7. **Flows & Modules** - Depends on queues, views, and all other resources
+6. **Routing Profiles** - Depends on queues (for queue associations and default outbound)
+7. **Views** - No dependencies
+8. **Flows & Modules** - Depends on queues, views, routing profiles, and all other resources
 
 ## Resources to Copy
 
@@ -158,7 +159,7 @@ All commands share these required options:
 **Source config**:
 - `instanceId` - Amazon Connect instance ID
 - `region` - AWS region
-- `*Filters` - Optional include/exclude patterns (flowFilters, moduleFilters, viewFilters, agentStatusFilters, hoursFilters, hierarchyGroupFilters, securityProfileFilters, queueFilters)
+- `*Filters` - Optional include/exclude patterns (flowFilters, moduleFilters, viewFilters, agentStatusFilters, hoursFilters, hierarchyGroupFilters, securityProfileFilters, queueFilters, routingProfileFilters)
 
 **Target config**:
 - `instanceId` - Amazon Connect instance ID
@@ -177,6 +178,7 @@ Note: Filters only apply to source config.
 | `copy-hierarchy-groups` | `--force-hierarchy-recreate` | WARNING: severs historical data |
 | `copy-security-profiles` | | APPLICATIONS requires manual config |
 | `copy-queues` | `--skip-outbound-flow` | STANDARD only; phone/email manual |
+| `copy-routing-profiles` | | Depends on queues |
 | `copy-views` | `--include-aws-managed` | |
 
 ## Known Limitations
@@ -248,6 +250,7 @@ Note: Filters only apply to source config.
 - Start with capital letter and end with period
 - Format: Subject line, blank line, optional body with details
 - Body should provide context using bullet points or paragraphs
+- Do not sign commits (no -S flag)
 
 ---
 

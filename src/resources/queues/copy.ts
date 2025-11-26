@@ -42,7 +42,10 @@ export async function copyQueues(options: CopyQueuesOptions) {
       targetInstanceId: config.target.instanceId,
       filterConfig: config.source.queueFilters
     },
-    options.skipOutboundFlow
+    {
+      skipOutboundFlow: options.skipOutboundFlow,
+      phoneNumberMappings: config.source.phoneNumberMappings
+    }
   );
 
   if (comparisonResult.actions.length === 0 && comparisonResult.queues.length === 0) {
@@ -81,7 +84,7 @@ async function executeQueueCopy(targetClient: ConnectClient, targetInstanceId: s
     if (action.action === "create") {
       logQueueCreate(action, verbose);
 
-      const outboundConfig = buildOutboundCallerConfig(action.sourceQueue, result.flowMapping, skipOutboundFlow);
+      const outboundConfig = buildOutboundCallerConfig(action.sourceQueue, result.flowMapping, result.phoneMapping, skipOutboundFlow);
 
       const createdQueue = await createQueue(targetClient, targetInstanceId, {
         Name: action.sourceQueue.Name,
@@ -129,7 +132,7 @@ async function executeQueueCopy(targetClient: ConnectClient, targetInstanceId: s
       );
 
       // Update outbound caller config
-      const outboundConfig = buildOutboundCallerConfig(action.sourceQueue, result.flowMapping, skipOutboundFlow);
+      const outboundConfig = buildOutboundCallerConfig(action.sourceQueue, result.flowMapping, result.phoneMapping, skipOutboundFlow);
       if (outboundConfig) {
         await updateQueueOutboundCallerConfig(
           targetClient,
@@ -163,18 +166,23 @@ async function executeQueueCopy(targetClient: ConnectClient, targetInstanceId: s
   }
 
   console.log(`\nCopy complete: ${created} created, ${updatedData} data updated, ${updatedTags} tags updated`);
-  logManualConfigurationWarning(skipOutboundFlow);
+  logManualConfigurationWarning(skipOutboundFlow, result.queuesWithUnmappedPhones);
 }
 
 
-function buildOutboundCallerConfig(sourceQueue: QueueAction["sourceQueue"], flowMapping: Record<string, string>, skipOutboundFlow: boolean) {
+function buildOutboundCallerConfig(sourceQueue: QueueAction["sourceQueue"], flowMapping: Record<string, string>, phoneMapping: Record<string, string>, skipOutboundFlow: boolean) {
   const sourceConfig = sourceQueue.OutboundCallerConfig;
   if (!sourceConfig) return undefined;
 
-  const config: { OutboundCallerIdName?: string; OutboundFlowId?: string } = {};
+  const config: { OutboundCallerIdName?: string; OutboundCallerIdNumberId?: string; OutboundFlowId?: string } = {};
 
   if (sourceConfig.OutboundCallerIdName) {
     config.OutboundCallerIdName = sourceConfig.OutboundCallerIdName;
+  }
+
+  if (sourceConfig.OutboundCallerIdNumberId) {
+    const mappedPhoneId = phoneMapping[sourceConfig.OutboundCallerIdNumberId];
+    if (mappedPhoneId) config.OutboundCallerIdNumberId = mappedPhoneId;
   }
 
   if (!skipOutboundFlow && sourceConfig.OutboundFlowId) {
@@ -205,7 +213,7 @@ function logQueueUpdate(action: QueueAction, result: QueueComparisonResult, verb
   console.log(`Updating queue: ${action.queueName}`);
   if (!verbose || !action.targetQueue) return;
 
-  const diffs = getQueueDiff(action.sourceQueue, action.targetQueue, result.hooMapping, result.flowMapping, skipOutboundFlow);
+  const diffs = getQueueDiff(action.sourceQueue, action.targetQueue, result.hooMapping, result.flowMapping, result.phoneMapping, skipOutboundFlow);
   console.log(`  Diffs: ${diffs.join("\n    ")}`);
 }
 
@@ -218,20 +226,42 @@ function logTagsUpdate(action: QueueAction, verbose: boolean) {
 }
 
 
-function logManualConfigurationWarning(skipOutboundFlow: boolean) {
+function logManualConfigurationWarning(skipOutboundFlow: boolean, queuesWithUnmappedPhones: string[]) {
+  const hasUnmappedPhones = queuesWithUnmappedPhones.length > 0;
+  const hasAnyWarnings = hasUnmappedPhones || skipOutboundFlow;
+
+  if (!hasAnyWarnings) {
+    console.log("\n" + "=".repeat(72));
+    console.log("ℹ️  REMINDER: Some settings cannot be copied automatically:");
+    console.log("=".repeat(72));
+    console.log("\n• Outbound Email Address - Email addresses are instance-specific");
+    console.log("  Configure manually in the AWS Connect Console if needed.");
+    console.log("\n• Quick Connect Associations - Run copy-quick-connects after this tool");
+    console.log("\n" + "=".repeat(72));
+    return;
+  }
+
   console.log("\n" + "=".repeat(72));
-  console.log("⚠️  MANUAL CONFIGURATION MAY BE REQUIRED");
+  console.log("⚠️  MANUAL CONFIGURATION REQUIRED");
   console.log("=".repeat(72));
-  console.log("\nThe following queue settings cannot be copied automatically:");
-  console.log("\n• Outbound Caller ID Number - Phone numbers are instance-specific");
-  console.log("  Configure manually in the AWS Connect Console.");
-  console.log("\n• Outbound Email Address - Email addresses are instance-specific");
-  console.log("  Configure manually in the AWS Connect Console.");
-  console.log("\n• Quick Connect Associations - Run copy-quick-connects after this tool");
+
+  if (hasUnmappedPhones) {
+    console.log("\n• Outbound Caller ID Number - The following queues have phone numbers");
+    console.log("  that were not copied (no mapping provided in phoneNumberMappings):");
+    for (const queueName of queuesWithUnmappedPhones) {
+      console.log(`    - ${queueName}`);
+    }
+    console.log("  Configure manually in the AWS Connect Console, or add mappings to");
+    console.log("  phoneNumberMappings in your source config and re-run.");
+  }
 
   if (skipOutboundFlow) {
     console.log("\n• Outbound Whisper Flow - Re-run without --skip-outbound-flow after copying flows");
   }
+
+  console.log("\n• Outbound Email Address - Email addresses are instance-specific");
+  console.log("  Configure manually in the AWS Connect Console if needed.");
+  console.log("\n• Quick Connect Associations - Run copy-quick-connects after this tool");
 
   console.log("\n" + "=".repeat(72));
 }

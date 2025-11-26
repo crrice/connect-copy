@@ -1,6 +1,7 @@
 
 import {
   ListQueuesCommand,
+  ListPhoneNumbersV2Command,
   DescribeQueueCommand,
   CreateQueueCommand,
   UpdateQueueNameCommand,
@@ -10,7 +11,7 @@ import {
   UpdateQueueStatusCommand
 } from "@aws-sdk/client-connect";
 
-import type { ConnectClient, Queue, QueueSummary } from "@aws-sdk/client-connect";
+import type { ConnectClient, Queue, QueueSummary, ListPhoneNumbersSummary } from "@aws-sdk/client-connect";
 
 
 export async function listStandardQueues(client: ConnectClient, instanceId: string): Promise<QueueSummary[]> {
@@ -34,6 +35,29 @@ export async function listStandardQueues(client: ConnectClient, instanceId: stri
   } while (nextToken);
 
   return queues;
+}
+
+
+export async function listPhoneNumbers(client: ConnectClient, instanceId: string): Promise<ListPhoneNumbersSummary[]> {
+  const phoneNumbers: ListPhoneNumbersSummary[] = [];
+  let nextToken: string | undefined;
+
+  do {
+    const response = await client.send(
+      new ListPhoneNumbersV2Command({
+        InstanceId: instanceId,
+        NextToken: nextToken
+      })
+    );
+
+    if (response.ListPhoneNumbersSummaryList) {
+      phoneNumbers.push(...response.ListPhoneNumbersSummaryList);
+    }
+
+    nextToken = response.NextToken;
+  } while (nextToken);
+
+  return phoneNumbers;
 }
 
 

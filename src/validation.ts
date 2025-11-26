@@ -18,6 +18,7 @@ export interface SourceConfig {
   securityProfileFilters?: FilterConfig;
   queueFilters?: FilterConfig;
   routingProfileFilters?: FilterConfig;
+  phoneNumberMappings?: Record<string, string>;
 }
 
 export interface FilterConfig {
@@ -215,7 +216,7 @@ const SourceConfigValidator = V.shape({
   securityProfileFilters: FilterValidator.optional,
   queueFilters: FilterValidator.optional,
   routingProfileFilters: FilterValidator.optional
-}).noextra;
+});
 
 
 const TargetConfigValidator = V.shape({
@@ -225,12 +226,27 @@ const TargetConfigValidator = V.shape({
 
 
 export function validateSourceConfig(data: unknown): SourceConfig {
-  if (SourceConfigValidator(data)) {
-    return data;
+  if (!SourceConfigValidator(data)) {
+    const errors = SourceConfigValidator.getErrors();
+    throw new Error(`Invalid source config:\n${errors.join('\n')}`);
   }
 
-  const errors = SourceConfigValidator.getErrors();
-  throw new Error(`Invalid source config:\n${errors.join('\n')}`);
+  const config = data as SourceConfig;
+
+  // Validate phoneNumberMappings manually (Record<string, string>)
+  if (config.phoneNumberMappings !== undefined) {
+    if (typeof config.phoneNumberMappings !== "object" || config.phoneNumberMappings === null) {
+      throw new Error("Invalid source config: phoneNumberMappings must be an object");
+    }
+
+    for (const [key, value] of Object.entries(config.phoneNumberMappings)) {
+      if (typeof key !== "string" || typeof value !== "string") {
+        throw new Error("Invalid source config: phoneNumberMappings must be Record<string, string>");
+      }
+    }
+  }
+
+  return config;
 }
 
 
