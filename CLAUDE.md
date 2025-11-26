@@ -250,7 +250,7 @@ Note: Filters only apply to source config.
 - Start with capital letter and end with period
 - Format: Subject line, blank line, optional body with details
 - Body should provide context using bullet points or paragraphs
-- Do not sign commits (no -S flag)
+- Do not sign commits - use `--no-gpg-sign` flag explicitly
 
 ---
 
