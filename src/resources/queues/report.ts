@@ -320,7 +320,7 @@ export function getQueueDiff(source: NoUndefinedVals<Queue>, target: NoUndefined
 }
 
 
-export function displayQueuePlan(result: QueueComparisonResult, verbose: boolean) {
+export function displayQueuePlan(result: QueueComparisonResult, verbose: boolean, skipOutboundFlow: boolean) {
   const toCreate = result.actions.filter(a => a.action === "create");
   const toUpdateAll = result.actions.filter(a => a.action === "update_all");
   const toUpdateData = result.actions.filter(a => a.action === "update_data");
@@ -356,7 +356,7 @@ export function displayQueuePlan(result: QueueComparisonResult, verbose: boolean
     for (const action of toUpdateAll) {
       console.log(`  - ${action.queueName}`);
       if (verbose && action.targetQueue) {
-        const diffs = getQueueDiff(action.sourceQueue, action.targetQueue, result.hooMapping, result.flowMapping, result.phoneMapping, false);
+        const diffs = getQueueDiff(action.sourceQueue, action.targetQueue, result.hooMapping, result.flowMapping, result.phoneMapping, skipOutboundFlow);
         for (const diff of diffs) {
           console.log(`      ${diff}`);
         }
@@ -369,7 +369,7 @@ export function displayQueuePlan(result: QueueComparisonResult, verbose: boolean
     for (const action of toUpdateData) {
       console.log(`  - ${action.queueName}`);
       if (verbose && action.targetQueue) {
-        const diffs = getQueueDiff(action.sourceQueue, action.targetQueue, result.hooMapping, result.flowMapping, result.phoneMapping, false);
+        const diffs = getQueueDiff(action.sourceQueue, action.targetQueue, result.hooMapping, result.flowMapping, result.phoneMapping, skipOutboundFlow);
         for (const diff of diffs) {
           console.log(`      ${diff}`);
         }

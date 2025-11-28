@@ -53,7 +53,7 @@ export async function copyQueues(options: CopyQueuesOptions) {
     return;
   }
 
-  displayQueuePlan(comparisonResult, options.verbose);
+  displayQueuePlan(comparisonResult, options.verbose, options.skipOutboundFlow);
 
   const needsCopy = comparisonResult.actions.some(a => a.action !== "skip");
 
@@ -84,7 +84,7 @@ async function executeQueueCopy(targetClient: ConnectClient, targetInstanceId: s
     if (action.action === "create") {
       logQueueCreate(action, verbose);
 
-      const outboundConfig = buildOutboundCallerConfig(action.sourceQueue, result.flowMapping, result.phoneMapping, skipOutboundFlow);
+      const outboundConfig = buildOutboundCallerConfigForCreate(action.sourceQueue, result.flowMapping, result.phoneMapping, skipOutboundFlow);
 
       const createdQueue = await createQueue(targetClient, targetInstanceId, {
         Name: action.sourceQueue.Name,
@@ -131,16 +131,14 @@ async function executeQueueCopy(targetClient: ConnectClient, targetInstanceId: s
         action.sourceQueue.MaxContacts
       );
 
-      // Update outbound caller config
-      const outboundConfig = buildOutboundCallerConfig(action.sourceQueue, result.flowMapping, result.phoneMapping, skipOutboundFlow);
-      if (outboundConfig) {
-        await updateQueueOutboundCallerConfig(
-          targetClient,
-          targetInstanceId,
-          action.targetQueueId!,
-          outboundConfig
-        );
-      }
+      // Update outbound caller config (always call - empty object clears fields)
+      const outboundConfig = buildOutboundCallerConfigForUpdate(action.sourceQueue, result.flowMapping, result.phoneMapping, skipOutboundFlow);
+      await updateQueueOutboundCallerConfig(
+        targetClient,
+        targetInstanceId,
+        action.targetQueueId!,
+        outboundConfig
+      );
 
       // Update status
       if (action.sourceQueue.Status && action.sourceQueue.Status !== action.targetQueue?.Status) {
@@ -170,7 +168,7 @@ async function executeQueueCopy(targetClient: ConnectClient, targetInstanceId: s
 }
 
 
-function buildOutboundCallerConfig(sourceQueue: QueueAction["sourceQueue"], flowMapping: Record<string, string>, phoneMapping: Record<string, string>, skipOutboundFlow: boolean) {
+function buildOutboundCallerConfigForCreate(sourceQueue: QueueAction["sourceQueue"], flowMapping: Record<string, string>, phoneMapping: Record<string, string>, skipOutboundFlow: boolean) {
   const sourceConfig = sourceQueue.OutboundCallerConfig;
   if (!sourceConfig) return undefined;
 
@@ -190,9 +188,32 @@ function buildOutboundCallerConfig(sourceQueue: QueueAction["sourceQueue"], flow
     if (mappedFlowId) config.OutboundFlowId = mappedFlowId;
   }
 
-  // Only return config if there's something to set
   if (Object.keys(config).length === 0) return undefined;
 
+  return config;
+}
+
+
+function buildOutboundCallerConfigForUpdate(sourceQueue: QueueAction["sourceQueue"], flowMapping: Record<string, string>, phoneMapping: Record<string, string>, skipOutboundFlow: boolean) {
+  const sourceConfig = sourceQueue.OutboundCallerConfig;
+  const config: { OutboundCallerIdName?: string; OutboundCallerIdNumberId?: string; OutboundFlowId?: string } = {};
+
+  // Copy fields from source - omitted fields will be cleared by AWS API
+  if (sourceConfig?.OutboundCallerIdName) {
+    config.OutboundCallerIdName = sourceConfig.OutboundCallerIdName;
+  }
+
+  if (sourceConfig?.OutboundCallerIdNumberId) {
+    const mappedPhoneId = phoneMapping[sourceConfig.OutboundCallerIdNumberId];
+    if (mappedPhoneId) config.OutboundCallerIdNumberId = mappedPhoneId;
+  }
+
+  if (!skipOutboundFlow && sourceConfig?.OutboundFlowId) {
+    const mappedFlowId = flowMapping[sourceConfig.OutboundFlowId];
+    if (mappedFlowId) config.OutboundFlowId = mappedFlowId;
+  }
+
+  // Always return config (even if empty) - AWS API clears omitted fields
   return config;
 }
 
