@@ -1,17 +1,16 @@
 
-import type { ConnectClient, AgentStatusSummary, AgentStatus } from "@aws-sdk/client-connect";
-
 import * as CliUtil from "../../utils/cli-utils.js";
 import { listAgentStatuses } from "../../connect/resources.js";
 import { matchesFlowFilters } from "../../filters.js";
 import { describeAgentStatus } from "./operations.js";
 
-import type { SourceConfig } from "../../validation.js";
+import type { AgentStatusSummary, AgentStatus } from "@aws-sdk/client-connect";
 
 
 export interface AgentStatusAction {
-  statusName: string;
   action: "create" | "update_all" | "update_tags" | "update_data" | "skip";
+
+  statusName: string;
   sourceStatus: AgentStatus;
   targetStatus?: AgentStatus;
   targetStatusId?: string;
@@ -21,12 +20,68 @@ export interface AgentStatusAction {
 
 export interface AgentStatusComparisonResult {
   actions: AgentStatusAction[];
-  statusesToProcess: AgentStatusSummary[];
+  statuses: AgentStatusSummary[];
 }
 
 
-function filterSystemStatuses(statuses: AgentStatusSummary[]): AgentStatusSummary[] {
-  return statuses.filter(s => s.Type === 'CUSTOM');
+export async function compareAgentStatuses(config: CliUtil.ResourceComparisonConfig): Promise<AgentStatusComparisonResult> {
+  const {
+    sourceClient,
+    targetClient,
+    sourceInstanceId,
+    targetInstanceId,
+    filterConfig
+  } = config;
+
+  const sourceStatuses = await listAgentStatuses(sourceClient, sourceInstanceId);
+  const targetStatuses = await listAgentStatuses(targetClient, targetInstanceId);
+
+  // Filter to custom statuses only (exclude system statuses like Available, Offline)
+  let filteredSourceStatuses = sourceStatuses.filter(s => s.Type === "CUSTOM");
+
+  if (filterConfig) {
+    filteredSourceStatuses = filteredSourceStatuses.filter(status =>
+      matchesFlowFilters(status.Name!, filterConfig)
+    );
+  }
+
+  const targetStatusesByName = Object.fromEntries(targetStatuses.map(s => [s.Name, s]));
+  const actions: AgentStatusAction[] = [];
+
+  for (const sourceSummary of filteredSourceStatuses) {
+    const sourceStatus = await describeAgentStatus(sourceClient, sourceInstanceId, sourceSummary.Id!);
+    const targetSummary = targetStatusesByName[sourceSummary.Name!];
+
+    if (!targetSummary) {
+      actions.push({
+        statusName: sourceSummary.Name!,
+        action: "create",
+        sourceStatus
+      });
+      continue;
+    }
+
+    const targetStatus = await describeAgentStatus(targetClient, targetInstanceId, targetSummary.Id!);
+
+    const contentMatches = agentStatusContentMatches(sourceStatus, targetStatus);
+    const tagsMatch = CliUtil.recordsMatch(sourceStatus.Tags, targetStatus.Tags);
+
+    const actionType = (!contentMatches && !tagsMatch) ? "update_all"
+      : !contentMatches ? "update_data"
+      : !tagsMatch ? "update_tags"
+      : "skip";
+
+    actions.push({
+      statusName: sourceSummary.Name!,
+      action: actionType,
+      sourceStatus,
+      targetStatus,
+      targetStatusId: targetSummary.Id,
+      targetStatusArn: targetSummary.Arn
+    });
+  }
+
+  return { actions, statuses: filteredSourceStatuses };
 }
 
 
@@ -36,16 +91,11 @@ function agentStatusContentMatches(source: AgentStatus, target: AgentStatus): bo
 
   // DisplayOrder only matters when ENABLED - AWS clears it to null when DISABLED
   // and rejects attempts to set it on DISABLED statuses
-  if (source.State === 'ENABLED' || target.State === 'ENABLED') {
+  if (source.State === "ENABLED" || target.State === "ENABLED") {
     if (source.DisplayOrder !== target.DisplayOrder) return false;
   }
 
   return true;
-}
-
-
-function agentStatusTagsMatch(source: AgentStatus, target: AgentStatus): boolean {
-  return CliUtil.recordsMatch(source.Tags, target.Tags);
 }
 
 
@@ -57,93 +107,96 @@ export function getAgentStatusDiff(source: AgentStatus, target: AgentStatus): st
   }
 
   if (source.Description !== target.Description) {
-    diffs.push(`Description: ${target.Description ?? '(none)'} → ${source.Description ?? '(none)'}`);
+    diffs.push(`Description: ${target.Description ?? "(none)"} → ${source.Description ?? "(none)"}`);
   }
 
   // DisplayOrder only shown if different - both DISABLED statuses have null so won't show
   if (source.DisplayOrder !== target.DisplayOrder) {
-    diffs.push(`DisplayOrder: ${target.DisplayOrder ?? '(none)'} → ${source.DisplayOrder ?? '(none)'}`);
+    diffs.push(`DisplayOrder: ${target.DisplayOrder ?? "(none)"} → ${source.DisplayOrder ?? "(none)"}`);
   }
 
   return diffs;
 }
 
 
-export function getAgentStatusTagDiff(source: AgentStatus, target: AgentStatus): { toAdd: Record<string, string>; toRemove: string[] } {
-  return CliUtil.getRecordDiff(source.Tags, target.Tags);
-}
+export function displayAgentStatusPlan(result: AgentStatusComparisonResult, verbose: boolean) {
+  const toCreate = result.actions.filter(a => a.action === "create");
+  const toUpdateAll = result.actions.filter(a => a.action === "update_all");
+  const toUpdateData = result.actions.filter(a => a.action === "update_data");
+  const toUpdateTags = result.actions.filter(a => a.action === "update_tags");
+  const toSkip = result.actions.filter(a => a.action === "skip");
 
+  console.log(`\nSummary:`);
+  console.log(`  Agent statuses to create: ${toCreate.length}`);
+  console.log(`  Agent statuses to update (all): ${toUpdateAll.length}`);
+  console.log(`  Agent statuses to update (data only): ${toUpdateData.length}`);
+  console.log(`  Agent statuses to update (tags only): ${toUpdateTags.length}`);
+  console.log(`  Agent statuses to skip (identical): ${toSkip.length}`);
+  console.log(`  Total processed: ${result.statuses.length}`);
 
-export async function compareAgentStatuses(sourceClient: ConnectClient, targetClient: ConnectClient, sourceInstanceId: string, targetInstanceId: string, sourceConfig: SourceConfig): Promise<AgentStatusComparisonResult> {
-  const sourceStatuses = await listAgentStatuses(sourceClient, sourceInstanceId);
-  const targetStatuses = await listAgentStatuses(targetClient, targetInstanceId);
-
-  let statusesToCopy = filterSystemStatuses(sourceStatuses);
-
-  if (sourceConfig.agentStatusFilters) {
-    statusesToCopy = statusesToCopy.filter(status =>
-      matchesFlowFilters(status.Name ?? "", sourceConfig.agentStatusFilters)
-    );
+  if (toCreate.length > 0) {
+    console.log(`\nAgent statuses to create:`);
+    for (const action of toCreate) {
+      console.log(`  - ${action.statusName}`);
+      if (verbose) {
+        const status = action.sourceStatus;
+        console.log(`      State: ${status.State}`);
+        if (status.Description) console.log(`      Description: ${status.Description}`);
+        if (status.State === "ENABLED" && status.DisplayOrder !== undefined) {
+          console.log(`      DisplayOrder: ${status.DisplayOrder}`);
+        }
+        if (status.Tags && Object.keys(status.Tags).length > 0) {
+          console.log(`      Tags: ${Object.entries(status.Tags).map(([k, v]) => `${k}=${v}`).join(", ")}`);
+        }
+      }
+    }
   }
 
-  const targetStatusesByName = new Map(
-    targetStatuses.map(s => [s.Name!, s])
-  );
-
-  const actions: AgentStatusAction[] = [];
-
-  for (const statusSummary of statusesToCopy) {
-    const statusName = statusSummary.Name!;
-    const targetStatus = targetStatusesByName.get(statusName);
-
-    const sourceStatusFull = await describeAgentStatus(
-      sourceClient,
-      sourceInstanceId,
-      statusSummary.Id!
-    );
-
-    if (!targetStatus) {
-      actions.push({
-        statusName,
-        action: 'create',
-        sourceStatus: sourceStatusFull
-      });
-      continue;
+  if (toUpdateAll.length > 0) {
+    console.log(`\nAgent statuses to update (all):`);
+    for (const action of toUpdateAll) {
+      console.log(`  - ${action.statusName}`);
+      if (verbose && action.targetStatus) {
+        const diffs = getAgentStatusDiff(action.sourceStatus, action.targetStatus);
+        for (const diff of diffs) {
+          console.log(`      ${diff}`);
+        }
+        const { toAdd, toRemove } = CliUtil.getRecordDiff(action.sourceStatus.Tags, action.targetStatus.Tags);
+        if (Object.keys(toAdd).length) console.log(`      Tags to add: ${Object.entries(toAdd).map(([k, v]) => `${k}=${v}`).join(", ")}`);
+        if (toRemove.length) console.log(`      Tags to remove: ${toRemove.join(", ")}`);
+      }
     }
-
-    const targetStatusFull = await describeAgentStatus(
-      targetClient,
-      targetInstanceId,
-      targetStatus.Id!
-    );
-
-    const contentMatches = agentStatusContentMatches(sourceStatusFull, targetStatusFull);
-    const tagsMatch = agentStatusTagsMatch(sourceStatusFull, targetStatusFull);
-
-    let actionType: "update_all" | "update_tags" | "update_data" | "skip";
-    if (!contentMatches && !tagsMatch) {
-      actionType = "update_all";
-    } else if (!contentMatches) {
-      actionType = "update_data";
-    } else if (!tagsMatch) {
-      actionType = "update_tags";
-    } else {
-      actionType = "skip";
-    }
-
-    const action: AgentStatusAction = {
-      statusName,
-      action: actionType,
-      sourceStatus: sourceStatusFull,
-      targetStatus: targetStatusFull
-    };
-    if (targetStatus.Id !== undefined) action.targetStatusId = targetStatus.Id;
-    if (targetStatus.Arn !== undefined) action.targetStatusArn = targetStatus.Arn;
-    actions.push(action);
   }
 
-  return {
-    actions,
-    statusesToProcess: statusesToCopy
-  };
+  if (toUpdateData.length > 0) {
+    console.log(`\nAgent statuses to update (data only):`);
+    for (const action of toUpdateData) {
+      console.log(`  - ${action.statusName}`);
+      if (verbose && action.targetStatus) {
+        const diffs = getAgentStatusDiff(action.sourceStatus, action.targetStatus);
+        for (const diff of diffs) {
+          console.log(`      ${diff}`);
+        }
+      }
+    }
+  }
+
+  if (toUpdateTags.length > 0) {
+    console.log(`\nAgent statuses to update (tags only):`);
+    for (const action of toUpdateTags) {
+      console.log(`  - ${action.statusName}`);
+      if (verbose && action.targetStatus) {
+        const { toAdd, toRemove } = CliUtil.getRecordDiff(action.sourceStatus.Tags, action.targetStatus.Tags);
+        if (Object.keys(toAdd).length) console.log(`      Tags to add: ${Object.entries(toAdd).map(([k, v]) => `${k}=${v}`).join(", ")}`);
+        if (toRemove.length) console.log(`      Tags to remove: ${toRemove.join(", ")}`);
+      }
+    }
+  }
+
+  if (toSkip.length > 0 && verbose) {
+    console.log(`\nAgent statuses to skip (identical):`);
+    for (const action of toSkip) {
+      console.log(`  - ${action.statusName}`);
+    }
+  }
 }

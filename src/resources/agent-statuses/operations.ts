@@ -7,17 +7,17 @@ import type { ConnectClient, AgentStatus } from "@aws-sdk/client-connect";
 export interface CreateAgentStatusConfig {
   Name: string;
   State: "ENABLED" | "DISABLED";
-  Description?: string;
-  DisplayOrder?: number;
-  Tags?: Record<string, string>;
+  Description?: string | undefined;
+  DisplayOrder?: number | undefined;
+  Tags?: Record<string, string> | undefined;
 }
 
 
 export interface UpdateAgentStatusConfig {
-  Name?: string;
+  Name?: string | undefined;
   State?: "ENABLED" | "DISABLED";
-  Description?: string;
-  DisplayOrder?: number;
+  Description?: string | undefined;
+  DisplayOrder?: number | undefined;
 }
 
 
