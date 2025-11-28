@@ -6,18 +6,18 @@ import type { ConnectClient, HoursOfOperation, HoursOfOperationConfig } from "@a
 
 export interface CreateHoursOfOperationConfig {
   Name: string;
-  Description?: string;
   TimeZone: string;
   Config: HoursOfOperationConfig[];
-  Tags?: Record<string, string>;
+  Description?: string | undefined;
+  Tags?: Record<string, string> | undefined;
 }
 
 
 export interface UpdateHoursOfOperationConfig {
-  Name?: string;
-  Description?: string;
-  TimeZone?: string;
-  Config?: HoursOfOperationConfig[];
+  Name?: string | undefined;
+  Description?: string | undefined;
+  TimeZone?: string | undefined;
+  Config?: HoursOfOperationConfig[] | undefined;
 }
 
 

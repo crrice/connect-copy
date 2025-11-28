@@ -1,40 +1,98 @@
 
-import type { ConnectClient, HoursOfOperationSummary, HoursOfOperation, HoursOfOperationConfig, HoursOfOperationDays } from "@aws-sdk/client-connect";
-
 import * as CliUtil from "../../utils/cli-utils.js";
 import { listHoursOfOperations } from "../../connect/resources.js";
 import { matchesFlowFilters } from "../../filters.js";
 import { describeHoursOfOperation } from "./operations.js";
 
-import type { SourceConfig } from "../../validation.js";
+import type { HoursOfOperationSummary, HoursOfOperation, HoursOfOperationConfig, HoursOfOperationDays } from "@aws-sdk/client-connect";
 
 
 export interface HoursOfOperationAction {
+  action: "create" | "update_all" | "update_tags" | "update_data" | "skip";
+
   hoursName: string;
-  action: 'create' | 'update' | 'skip';
   sourceHours: HoursOfOperation;
   targetHours?: HoursOfOperation;
   targetHoursId?: string;
   targetHoursArn?: string;
-  tagsNeedUpdate?: boolean;
 }
 
 
 export interface HoursOfOperationComparisonResult {
   actions: HoursOfOperationAction[];
-  hoursToProcess: HoursOfOperationSummary[];
+  hours: HoursOfOperationSummary[];
 }
 
 
-const DAY_ORDER: HoursOfOperationDays[] = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+const DAY_ORDER: HoursOfOperationDays[] = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"];
 
 
-function sortConfigByDay(config: HoursOfOperationConfig[]): HoursOfOperationConfig[] {
-  return [...config].sort((a, b) => {
-    const indexA = DAY_ORDER.indexOf(a.Day!);
-    const indexB = DAY_ORDER.indexOf(b.Day!);
-    return indexA - indexB;
-  });
+export async function compareHoursOfOperations(config: CliUtil.ResourceComparisonConfig): Promise<HoursOfOperationComparisonResult> {
+  const {
+    sourceClient,
+    targetClient,
+    sourceInstanceId,
+    targetInstanceId,
+    filterConfig
+  } = config;
+
+  const sourceHours = await listHoursOfOperations(sourceClient, sourceInstanceId);
+  const targetHours = await listHoursOfOperations(targetClient, targetInstanceId);
+
+  let filteredSourceHours = sourceHours;
+
+  if (filterConfig) {
+    filteredSourceHours = filteredSourceHours.filter(hours =>
+      matchesFlowFilters(hours.Name!, filterConfig)
+    );
+  }
+
+  const targetHoursByName = Object.fromEntries(targetHours.map(h => [h.Name, h]));
+  const actions: HoursOfOperationAction[] = [];
+
+  for (const sourceSummary of filteredSourceHours) {
+    const sourceHoursFull = await describeHoursOfOperation(sourceClient, sourceInstanceId, sourceSummary.Id!);
+    const targetSummary = targetHoursByName[sourceSummary.Name!];
+
+    if (!targetSummary) {
+      actions.push({
+        hoursName: sourceSummary.Name!,
+        action: "create",
+        sourceHours: sourceHoursFull
+      });
+      continue;
+    }
+
+    const targetHoursFull = await describeHoursOfOperation(targetClient, targetInstanceId, targetSummary.Id!);
+
+    const contentMatches = hoursOfOperationContentMatches(sourceHoursFull, targetHoursFull);
+    const tagsMatch = CliUtil.recordsMatch(sourceHoursFull.Tags, targetHoursFull.Tags);
+
+    const actionType = (!contentMatches && !tagsMatch) ? "update_all"
+      : !contentMatches ? "update_data"
+      : !tagsMatch ? "update_tags"
+      : "skip";
+
+    actions.push({
+      hoursName: sourceSummary.Name!,
+      action: actionType,
+      sourceHours: sourceHoursFull,
+      targetHours: targetHoursFull,
+      targetHoursId: targetSummary.Id,
+      targetHoursArn: targetSummary.Arn
+    });
+  }
+
+  return { actions, hours: filteredSourceHours };
+}
+
+
+function hoursOfOperationContentMatches(source: HoursOfOperation, target: HoursOfOperation): boolean {
+  if (source.Name !== target.Name) return false;
+  if (source.Description !== target.Description) return false;
+  if (source.TimeZone !== target.TimeZone) return false;
+
+  return configMatches(source.Config ?? [], target.Config ?? []);
 }
 
 
@@ -49,35 +107,27 @@ function configMatches(sourceConfig: HoursOfOperationConfig[], targetConfig: Hou
     const t = sortedTarget[i]!;
 
     if (s.Day !== t.Day) return false;
-    if (s.StartTime!.Hours !== t.StartTime!.Hours) return false;
-    if (s.StartTime!.Minutes !== t.StartTime!.Minutes) return false;
-    if (s.EndTime!.Hours !== t.EndTime!.Hours) return false;
-    if (s.EndTime!.Minutes !== t.EndTime!.Minutes) return false;
+    if (s.StartTime?.Hours !== t.StartTime?.Hours) return false;
+    if (s.StartTime?.Minutes !== t.StartTime?.Minutes) return false;
+    if (s.EndTime?.Hours !== t.EndTime?.Hours) return false;
+    if (s.EndTime?.Minutes !== t.EndTime?.Minutes) return false;
   }
 
   return true;
 }
 
 
-function hoursOfOperationContentMatches(source: HoursOfOperation, target: HoursOfOperation): boolean {
-  if (source.Name !== target.Name) return false;
-  if (source.Description !== target.Description) return false;
-  if (source.TimeZone !== target.TimeZone) return false;
-
-  const sourceConfig = source.Config ?? [];
-  const targetConfig = target.Config ?? [];
-
-  return configMatches(sourceConfig, targetConfig);
-}
-
-
-function hoursOfOperationTagsMatch(source: HoursOfOperation, target: HoursOfOperation): boolean {
-  return CliUtil.recordsMatch(source.Tags, target.Tags);
+function sortConfigByDay(config: HoursOfOperationConfig[]): HoursOfOperationConfig[] {
+  return [...config].sort((a, b) => {
+    const indexA = DAY_ORDER.indexOf(a.Day!);
+    const indexB = DAY_ORDER.indexOf(b.Day!);
+    return indexA - indexB;
+  });
 }
 
 
 function formatTime(hours: number, minutes: number): string {
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
 
 
@@ -92,7 +142,7 @@ export function getHoursOfOperationDiff(source: HoursOfOperation, target: HoursO
   const diffs: string[] = [];
 
   if (source.Description !== target.Description) {
-    diffs.push(`Description: ${target.Description ?? '(none)'} → ${source.Description ?? '(none)'}`);
+    diffs.push(`Description: ${target.Description ?? "(none)"} → ${source.Description ?? "(none)"}`);
   }
 
   if (source.TimeZone !== target.TimeZone) {
@@ -125,7 +175,7 @@ export function getHoursOfOperationDiff(source: HoursOfOperation, target: HoursO
         const sourceStr = formatConfigEntry(sourceEntry);
         const targetStr = formatConfigEntry(targetEntry);
         if (sourceStr !== targetStr) {
-          diffs.push(`${day}: ${targetStr.split(': ')[1]} → ${sourceStr.split(': ')[1]}`);
+          diffs.push(`${day}: ${targetStr.split(": ")[1]} → ${sourceStr.split(": ")[1]}`);
         }
       }
     }
@@ -135,91 +185,87 @@ export function getHoursOfOperationDiff(source: HoursOfOperation, target: HoursO
 }
 
 
-export function getHoursOfOperationTagDiff(source: HoursOfOperation, target: HoursOfOperation): { toAdd: Record<string, string>; toRemove: string[] } {
-  return CliUtil.getRecordDiff(source.Tags, target.Tags);
-}
+export function displayHoursOfOperationPlan(result: HoursOfOperationComparisonResult, verbose: boolean) {
+  const toCreate = result.actions.filter(a => a.action === "create");
+  const toUpdateAll = result.actions.filter(a => a.action === "update_all");
+  const toUpdateData = result.actions.filter(a => a.action === "update_data");
+  const toUpdateTags = result.actions.filter(a => a.action === "update_tags");
+  const toSkip = result.actions.filter(a => a.action === "skip");
 
+  console.log(`\nSummary:`);
+  console.log(`  Hours of operation to create: ${toCreate.length}`);
+  console.log(`  Hours of operation to update (all): ${toUpdateAll.length}`);
+  console.log(`  Hours of operation to update (data only): ${toUpdateData.length}`);
+  console.log(`  Hours of operation to update (tags only): ${toUpdateTags.length}`);
+  console.log(`  Hours of operation to skip (identical): ${toSkip.length}`);
+  console.log(`  Total processed: ${result.hours.length}`);
 
-export async function compareHoursOfOperations(sourceClient: ConnectClient, targetClient: ConnectClient, sourceInstanceId: string, targetInstanceId: string, sourceConfig: SourceConfig): Promise<HoursOfOperationComparisonResult> {
-  const sourceHours = await listHoursOfOperations(sourceClient, sourceInstanceId);
-  const targetHours = await listHoursOfOperations(targetClient, targetInstanceId);
-
-  let hoursToCopy = sourceHours;
-
-  if (sourceConfig.hoursFilters) {
-    hoursToCopy = hoursToCopy.filter(hours =>
-      matchesFlowFilters(hours.Name ?? "", sourceConfig.hoursFilters)
-    );
-  }
-
-  const targetHoursByName = new Map(
-    targetHours.map(h => [h.Name!, h])
-  );
-
-  const actions: HoursOfOperationAction[] = [];
-
-  for (const hoursSummary of hoursToCopy) {
-    const hoursName = hoursSummary.Name!;
-    const targetHoursSummary = targetHoursByName.get(hoursName);
-
-    const sourceHoursFull = await describeHoursOfOperation(
-      sourceClient,
-      sourceInstanceId,
-      hoursSummary.Id!
-    );
-
-    if (!targetHoursSummary) {
-      actions.push({
-        hoursName,
-        action: 'create',
-        sourceHours: sourceHoursFull
-      });
-      continue;
-    }
-
-    const targetHoursFull = await describeHoursOfOperation(
-      targetClient,
-      targetInstanceId,
-      targetHoursSummary.Id!
-    );
-
-    const contentMatches = hoursOfOperationContentMatches(sourceHoursFull, targetHoursFull);
-    const tagsMatch = hoursOfOperationTagsMatch(sourceHoursFull, targetHoursFull);
-
-    if (contentMatches && tagsMatch) {
-      actions.push({
-        hoursName,
-        action: 'skip',
-        sourceHours: sourceHoursFull,
-        targetHours: targetHoursFull,
-        targetHoursId: targetHoursSummary.Id!,
-        targetHoursArn: targetHoursSummary.Arn!
-      });
-    } else if (contentMatches && !tagsMatch) {
-      actions.push({
-        hoursName,
-        action: 'skip',
-        sourceHours: sourceHoursFull,
-        targetHours: targetHoursFull,
-        targetHoursId: targetHoursSummary.Id!,
-        targetHoursArn: targetHoursSummary.Arn!,
-        tagsNeedUpdate: true
-      });
-    } else {
-      actions.push({
-        hoursName,
-        action: 'update',
-        sourceHours: sourceHoursFull,
-        targetHours: targetHoursFull,
-        targetHoursId: targetHoursSummary.Id!,
-        targetHoursArn: targetHoursSummary.Arn!,
-        tagsNeedUpdate: !tagsMatch
-      });
+  if (toCreate.length > 0) {
+    console.log(`\nHours of operation to create:`);
+    for (const action of toCreate) {
+      console.log(`  - ${action.hoursName}`);
+      if (verbose) {
+        const hours = action.sourceHours;
+        console.log(`      TimeZone: ${hours.TimeZone}`);
+        if (hours.Description) console.log(`      Description: ${hours.Description}`);
+        if (hours.Config && hours.Config.length > 0) {
+          console.log(`      Schedule:`);
+          for (const config of sortConfigByDay(hours.Config)) {
+            console.log(`        ${formatConfigEntry(config)}`);
+          }
+        }
+        if (hours.Tags && Object.keys(hours.Tags).length > 0) {
+          console.log(`      Tags: ${Object.entries(hours.Tags).map(([k, v]) => `${k}=${v}`).join(", ")}`);
+        }
+      }
     }
   }
 
-  return {
-    actions,
-    hoursToProcess: hoursToCopy
-  };
+  if (toUpdateAll.length > 0) {
+    console.log(`\nHours of operation to update (all):`);
+    for (const action of toUpdateAll) {
+      console.log(`  - ${action.hoursName}`);
+      if (verbose && action.targetHours) {
+        const diffs = getHoursOfOperationDiff(action.sourceHours, action.targetHours);
+        for (const diff of diffs) {
+          console.log(`      ${diff}`);
+        }
+        const { toAdd, toRemove } = CliUtil.getRecordDiff(action.sourceHours.Tags, action.targetHours.Tags);
+        if (Object.keys(toAdd).length) console.log(`      Tags to add: ${Object.entries(toAdd).map(([k, v]) => `${k}=${v}`).join(", ")}`);
+        if (toRemove.length) console.log(`      Tags to remove: ${toRemove.join(", ")}`);
+      }
+    }
+  }
+
+  if (toUpdateData.length > 0) {
+    console.log(`\nHours of operation to update (data only):`);
+    for (const action of toUpdateData) {
+      console.log(`  - ${action.hoursName}`);
+      if (verbose && action.targetHours) {
+        const diffs = getHoursOfOperationDiff(action.sourceHours, action.targetHours);
+        for (const diff of diffs) {
+          console.log(`      ${diff}`);
+        }
+      }
+    }
+  }
+
+  if (toUpdateTags.length > 0) {
+    console.log(`\nHours of operation to update (tags only):`);
+    for (const action of toUpdateTags) {
+      console.log(`  - ${action.hoursName}`);
+      if (verbose && action.targetHours) {
+        const { toAdd, toRemove } = CliUtil.getRecordDiff(action.sourceHours.Tags, action.targetHours.Tags);
+        if (Object.keys(toAdd).length) console.log(`      Tags to add: ${Object.entries(toAdd).map(([k, v]) => `${k}=${v}`).join(", ")}`);
+        if (toRemove.length) console.log(`      Tags to remove: ${toRemove.join(", ")}`);
+      }
+    }
+  }
+
+  if (toSkip.length > 0 && verbose) {
+    console.log(`\nHours of operation to skip (identical):`);
+    for (const action of toSkip) {
+      console.log(`  - ${action.hoursName}`);
+    }
+  }
 }

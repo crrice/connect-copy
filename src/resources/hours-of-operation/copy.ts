@@ -1,14 +1,12 @@
 
-import type { ConnectClient } from "@aws-sdk/client-connect";
-
 import * as AwsUtil from "../../utils/aws-utils.js";
 import * as CliUtil from "../../utils/cli-utils.js";
 import { createConnectClient } from "../../connect/client.js";
-import { compareHoursOfOperations, getHoursOfOperationDiff, getHoursOfOperationTagDiff } from "./report.js";
+import { compareHoursOfOperations, displayHoursOfOperationPlan, getHoursOfOperationDiff } from "./report.js";
 import { createHoursOfOperation, updateHoursOfOperation } from "./operations.js";
 
-import type { HoursOfOperationComparisonResult } from "./report.js";
-import type { CreateHoursOfOperationConfig, UpdateHoursOfOperationConfig } from "./operations.js";
+import type { ConnectClient } from "@aws-sdk/client-connect";
+import type { HoursOfOperationComparisonResult, HoursOfOperationAction } from "./report.js";
 
 
 export interface CopyHoursOfOperationsOptions {
@@ -20,172 +18,24 @@ export interface CopyHoursOfOperationsOptions {
 }
 
 
-function displayHoursOfOperationPlan(result: HoursOfOperationComparisonResult, verbose: boolean) {
-  const toCreate = result.actions.filter(a => a.action === 'create');
-  const toUpdate = result.actions.filter(a => a.action === 'update');
-  const toUpdateTagsOnly = result.actions.filter(a => a.action === 'skip' && a.tagsNeedUpdate);
-  const toSkip = result.actions.filter(a => a.action === 'skip' && !a.tagsNeedUpdate);
-
-  console.log(`\nSummary:`);
-  console.log(`  Hours of operation to create: ${toCreate.length}`);
-  console.log(`  Hours of operation to update: ${toUpdate.length}`);
-  if (toUpdateTagsOnly.length > 0) {
-    console.log(`  Hours of operation to update tags only: ${toUpdateTagsOnly.length}`);
-  }
-  console.log(`  Hours of operation to skip (identical): ${toSkip.length}`);
-  console.log(`  Total processed: ${result.hoursToProcess.length}`);
-
-  if (toCreate.length > 0) {
-    console.log(`\nHours of operation to create:`);
-    for (const action of toCreate) {
-      console.log(`  - ${action.hoursName}`);
-      if (verbose) {
-        const hours = action.sourceHours;
-        console.log(`      TimeZone: ${hours.TimeZone}`);
-        if (hours.Description) console.log(`      Description: ${hours.Description}`);
-        if (hours.Config && hours.Config.length > 0) {
-          console.log(`      Schedule:`);
-          for (const config of hours.Config) {
-            const start = `${String(config.StartTime!.Hours).padStart(2, '0')}:${String(config.StartTime!.Minutes).padStart(2, '0')}`;
-            const end = `${String(config.EndTime!.Hours).padStart(2, '0')}:${String(config.EndTime!.Minutes).padStart(2, '0')}`;
-            console.log(`        ${config.Day}: ${start}-${end}`);
-          }
-        }
-        if (hours.Tags && Object.keys(hours.Tags).length > 0) {
-          console.log(`      Tags: ${Object.entries(hours.Tags).map(([k, v]) => `${k}=${v}`).join(', ')}`);
-        }
-      }
-    }
-  }
-
-  if (toUpdate.length > 0) {
-    console.log(`\nHours of operation to update:`);
-    for (const action of toUpdate) {
-      console.log(`  - ${action.hoursName}`);
-      if (verbose && action.targetHours) {
-        const diffs = getHoursOfOperationDiff(action.sourceHours, action.targetHours);
-        for (const diff of diffs) {
-          console.log(`      ${diff}`);
-        }
-        if (action.tagsNeedUpdate) {
-          const tagDiff = getHoursOfOperationTagDiff(action.sourceHours, action.targetHours);
-          if (Object.keys(tagDiff.toAdd).length) console.log(`      Tags to add: ${Object.entries(tagDiff.toAdd).map(([k, v]) => `${k}=${v}`).join(', ')}`);
-          if (tagDiff.toRemove.length) console.log(`      Tags to remove: ${tagDiff.toRemove.join(', ')}`);
-        }
-      }
-    }
-  }
-
-  if (toUpdateTagsOnly.length > 0 && verbose) {
-    console.log(`\nHours of operation with tag updates only:`);
-    for (const action of toUpdateTagsOnly) {
-      console.log(`  - ${action.hoursName}`);
-      if (action.targetHours) {
-        const tagDiff = getHoursOfOperationTagDiff(action.sourceHours, action.targetHours);
-        if (Object.keys(tagDiff.toAdd).length) console.log(`      Tags to add: ${Object.entries(tagDiff.toAdd).map(([k, v]) => `${k}=${v}`).join(', ')}`);
-        if (tagDiff.toRemove.length) console.log(`      Tags to remove: ${tagDiff.toRemove.join(', ')}`);
-      }
-    }
-  }
-
-  if (toSkip.length > 0 && verbose) {
-    console.log(`\nHours of operation to skip (identical):`);
-    for (const action of toSkip) {
-      console.log(`  - ${action.hoursName}`);
-    }
-  }
-}
-
-
-async function executeHoursOfOperationCopy(targetClient: ConnectClient, targetInstanceId: string, result: HoursOfOperationComparisonResult, verbose: boolean) {
-  let created = 0;
-  let updated = 0;
-  let tagsUpdated = 0;
-
-  for (const action of result.actions) {
-    if (action.action === 'skip' && !action.tagsNeedUpdate) continue;
-
-    if (action.action === 'create') {
-      console.log(`Creating hours of operation: ${action.hoursName}`);
-      if (verbose) {
-        const hours = action.sourceHours;
-        console.log(`  TimeZone: ${hours.TimeZone}`);
-        if (hours.Description) console.log(`  Description: ${hours.Description}`);
-        if (hours.Config?.length) {
-          console.log(`  Schedule:`);
-          for (const config of hours.Config) {
-            const start = `${String(config.StartTime!.Hours).padStart(2, '0')}:${String(config.StartTime!.Minutes).padStart(2, '0')}`;
-            const end = `${String(config.EndTime!.Hours).padStart(2, '0')}:${String(config.EndTime!.Minutes).padStart(2, '0')}`;
-            console.log(`    ${config.Day}: ${start}-${end}`);
-          }
-        }
-        if (Object.keys(hours.Tags ?? {}).length) {
-          console.log(`  Tags: ${Object.entries(hours.Tags!).map(([k, v]) => `${k}=${v}`).join(', ')}`);
-        }
-      }
-      await createHoursOfOperation(targetClient, targetInstanceId, {
-        Name: action.sourceHours.Name!,
-        Description: action.sourceHours.Description,
-        TimeZone: action.sourceHours.TimeZone!,
-        Config: action.sourceHours.Config!,
-        Tags: action.sourceHours.Tags
-      } as CreateHoursOfOperationConfig);
-      created++;
-    }
-
-    if (action.action === 'update') {
-      console.log(`Updating hours of operation: ${action.hoursName}`);
-      if (verbose && action.targetHours) {
-        const diffs = getHoursOfOperationDiff(action.sourceHours, action.targetHours);
-        for (const diff of diffs) {
-          console.log(`  ${diff}`);
-        }
-      }
-
-      await updateHoursOfOperation(targetClient, targetInstanceId, action.targetHoursId!, {
-        Name: action.sourceHours.Name,
-        Description: action.sourceHours.Description,
-        TimeZone: action.sourceHours.TimeZone,
-        Config: action.sourceHours.Config
-      } as UpdateHoursOfOperationConfig);
-      updated++;
-    }
-
-    if (action.tagsNeedUpdate) {
-      console.log(`Updating tags for hours of operation: ${action.hoursName}`);
-
-      const { toAdd, toRemove } = CliUtil.getRecordDiff(action.sourceHours.Tags, action.targetHours?.Tags);
-
-      await AwsUtil.updateResourceTags(targetClient, action.targetHoursArn!, toAdd, toRemove);
-
-      tagsUpdated++;
-    }
-  }
-
-  console.log(`\nCopy complete: ${created} created, ${updated} updated, ${tagsUpdated} tags updated`);
-}
-
-
 export async function copyHoursOfOperations(options: CopyHoursOfOperationsOptions) {
-  const { source: sourceConfig, target: targetConfig } = await CliUtil.loadConfigs(options);
+  const config = await CliUtil.loadConfigs(options);
 
-  const sourceClient = createConnectClient(sourceConfig.region, options.sourceProfile);
-  const targetClient = createConnectClient(targetConfig.region, options.targetProfile);
+  const sourceClient = createConnectClient(config.source.region, options.sourceProfile);
+  const targetClient = createConnectClient(config.target.region, options.targetProfile);
 
   console.log("\nAnalyzing hours of operation differences...");
-  const comparisonResult = await compareHoursOfOperations(
+  const comparisonResult = await compareHoursOfOperations({
     sourceClient,
     targetClient,
-    sourceConfig.instanceId,
-    targetConfig.instanceId,
-    sourceConfig
-  );
+    sourceInstanceId: config.source.instanceId,
+    targetInstanceId: config.target.instanceId,
+    filterConfig: config.source.hoursFilters
+  });
 
   displayHoursOfOperationPlan(comparisonResult, options.verbose);
 
-  const needsCopy = comparisonResult.actions.some(a =>
-    a.action !== 'skip' || a.tagsNeedUpdate
-  );
+  const needsCopy = comparisonResult.actions.some(a => a.action !== "skip");
 
   if (!needsCopy) {
     console.log("\nNo hours of operation need to be copied - all hours match");
@@ -199,5 +49,88 @@ export async function copyHoursOfOperations(options: CopyHoursOfOperationsOption
   }
 
   console.log("\nCopying hours of operation...");
-  await executeHoursOfOperationCopy(targetClient, targetConfig.instanceId, comparisonResult, options.verbose);
+  await executeHoursOfOperationCopy(targetClient, config.target.instanceId, comparisonResult, options.verbose);
+}
+
+
+async function executeHoursOfOperationCopy(targetClient: ConnectClient, targetInstanceId: string, result: HoursOfOperationComparisonResult, verbose: boolean) {
+  let created = 0;
+  let updatedData = 0;
+  let updatedTags = 0;
+
+  for (const action of result.actions) {
+    if (action.action === "skip") continue;
+
+    if (action.action === "create") {
+      logHoursCreate(action, verbose);
+
+      await createHoursOfOperation(targetClient, targetInstanceId, {
+        Name: action.sourceHours.Name!,
+        TimeZone: action.sourceHours.TimeZone!,
+        Config: action.sourceHours.Config!,
+        Description: action.sourceHours.Description,
+        Tags: action.sourceHours.Tags
+      });
+
+      created++;
+    }
+
+    if (["update_data", "update_all"].includes(action.action)) {
+      logHoursUpdate(action, verbose);
+
+      await updateHoursOfOperation(targetClient, targetInstanceId, action.targetHoursId!, {
+        Name: action.sourceHours.Name,
+        Description: action.sourceHours.Description,
+        TimeZone: action.sourceHours.TimeZone,
+        Config: action.sourceHours.Config
+      });
+
+      updatedData++;
+    }
+
+    if (["update_tags", "update_all"].includes(action.action)) {
+      logTagsUpdate(action, verbose);
+
+      const { toAdd, toRemove } = CliUtil.getRecordDiff(action.sourceHours.Tags, action.targetHours?.Tags);
+      await AwsUtil.updateResourceTags(targetClient, action.targetHoursArn!, toAdd, toRemove);
+
+      updatedTags++;
+    }
+  }
+
+  console.log(`\nCopy complete: ${created} created, ${updatedData} data updated, ${updatedTags} tags updated`);
+}
+
+
+function logHoursCreate(action: HoursOfOperationAction, verbose: boolean) {
+  console.log(`Creating hours of operation: ${action.hoursName}`);
+  if (!verbose) return;
+
+  const hours = action.sourceHours;
+  console.log(`  TimeZone: ${hours.TimeZone}`);
+  if (hours.Description) console.log(`  Description: ${hours.Description}`);
+  if (hours.Tags && Object.keys(hours.Tags).length > 0) {
+    console.log(`  Tags: ${Object.entries(hours.Tags).map(([k, v]) => `${k}=${v}`).join(", ")}`);
+  }
+}
+
+
+function logHoursUpdate(action: HoursOfOperationAction, verbose: boolean) {
+  console.log(`Updating hours of operation: ${action.hoursName}`);
+  if (!verbose || !action.targetHours) return;
+
+  const diffs = getHoursOfOperationDiff(action.sourceHours, action.targetHours);
+  for (const diff of diffs) {
+    console.log(`  ${diff}`);
+  }
+}
+
+
+function logTagsUpdate(action: HoursOfOperationAction, verbose: boolean) {
+  console.log(`Updating tags for hours of operation: ${action.hoursName}`);
+  if (!verbose || !action.targetHours) return;
+
+  const { toAdd, toRemove } = CliUtil.getRecordDiff(action.sourceHours.Tags, action.targetHours.Tags);
+  if (Object.keys(toAdd).length) console.log(`  Tags to add: ${Object.entries(toAdd).map(([k, v]) => `${k}=${v}`).join(", ")}`);
+  if (toRemove.length) console.log(`  Tags to remove: ${toRemove.join(", ")}`);
 }
