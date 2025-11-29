@@ -37,7 +37,7 @@ node dist/index.js     # Run CLI
 | Resource | Status | Notes |
 |----------|--------|-------|
 | Hours of Operation | ✅ Done | Consider refactoring to ResourceComparisonConfig pattern |
-| Agent Statuses | ✅ Done | Consider refactoring to ResourceComparisonConfig pattern |
+| Agent Statuses | ✅ Done | Cannot be deleted once created; consider refactoring to ResourceComparisonConfig pattern |
 | User Hierarchy Groups | ✅ Done | Has `--force-hierarchy-recreate` flag |
 | Security Profiles | ✅ Done | APPLICATIONS field requires manual config |
 | Queues | ✅ Done | Has `--skip-outbound-flow` flag |
