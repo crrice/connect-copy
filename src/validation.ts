@@ -18,6 +18,7 @@ export interface SourceConfig {
   securityProfileFilters?: FilterConfig;
   queueFilters?: FilterConfig;
   routingProfileFilters?: FilterConfig;
+  quickConnectFilters?: FilterConfig;
   phoneNumberMappings?: Record<string, string>;
 }
 
@@ -215,7 +216,8 @@ const SourceConfigValidator = V.shape({
   hierarchyGroupFilters: FilterValidator.optional,
   securityProfileFilters: FilterValidator.optional,
   queueFilters: FilterValidator.optional,
-  routingProfileFilters: FilterValidator.optional
+  routingProfileFilters: FilterValidator.optional,
+  quickConnectFilters: FilterValidator.optional
 });
 
 
