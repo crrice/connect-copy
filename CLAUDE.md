@@ -44,7 +44,7 @@ node dist/index.js     # Run CLI
 | Routing Profiles | 🔶 Initial | Implemented, needs production testing |
 | Views | ✅ Done | Has `--include-aws-managed` flag |
 | Flows & Modules | ✅ Done | Main copy command, uses two-pass approach |
-| Quick Connects | ❌ Todo | |
+| Quick Connects | ✅ Done | Syncs queue associations |
 | Prompts | ❌ Todo | Audio file handling |
 
 ### Resource Script Pattern
@@ -66,8 +66,9 @@ Copy resources in this order to satisfy dependencies:
 4. **Security Profiles** - Depends on hierarchy groups (for restrictions)
 5. **Queues** - Depends on hours of operation, optionally flows (for outbound whisper)
 6. **Routing Profiles** - Depends on queues (for queue associations and default outbound)
-7. **Views** - No dependencies
-8. **Flows & Modules** - Depends on queues, views, routing profiles, and all other resources
+7. **Quick Connects** - Depends on users, queues, flows (for USER/QUEUE types)
+8. **Views** - No dependencies
+9. **Flows & Modules** - Depends on queues, views, routing profiles, and all other resources
 
 ## Resources to Copy
 
@@ -159,7 +160,7 @@ All commands share these required options:
 **Source config**:
 - `instanceId` - Amazon Connect instance ID
 - `region` - AWS region
-- `*Filters` - Optional include/exclude patterns (flowFilters, moduleFilters, viewFilters, agentStatusFilters, hoursFilters, hierarchyGroupFilters, securityProfileFilters, queueFilters, routingProfileFilters)
+- `*Filters` - Optional include/exclude patterns (flowFilters, moduleFilters, viewFilters, agentStatusFilters, hoursFilters, hierarchyGroupFilters, securityProfileFilters, queueFilters, routingProfileFilters, quickConnectFilters)
 
 **Target config**:
 - `instanceId` - Amazon Connect instance ID
@@ -179,6 +180,7 @@ Note: Filters only apply to source config.
 | `copy-security-profiles` | | APPLICATIONS requires manual config |
 | `copy-queues` | `--skip-outbound-flow` | STANDARD only; phone/email manual |
 | `copy-routing-profiles` | | Depends on queues |
+| `copy-quick-connects` | | Depends on users, queues, flows |
 | `copy-views` | `--include-aws-managed` | |
 
 ## Known Limitations
@@ -237,7 +239,7 @@ Note: Filters only apply to source config.
 - Single Name Principle - all things should go by only one name
 - Cross-instance clarity - variables must indicate instance (e.g., `sourceGroup`, `targetParentName`)
 - Objects > Maps - use `Record<K, V>` unless non-string keys required
-- Arrays > Sets - use arrays unless Set operations genuinely needed
+- Arrays > Sets - use arrays unless Set operations genuinely needed (e.g., `.has()` for O(1) membership checks)
 
 ### Error Handling
 - Exceptions are for exceptional circumstances only - never for normal control flow
