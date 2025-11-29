@@ -9,3 +9,4 @@ test-utils/dist/
 config/
 .claude/settings.local.json
 backups/
+**/tests/*.ps1

@@ -35,11 +35,16 @@ export async function copyAgentStatuses(options: CopyAgentStatusesOptions) {
 
   displayAgentStatusPlan(comparisonResult, options.verbose);
 
+  const toCreate = comparisonResult.actions.filter(a => a.action === "create");
   const needsCopy = comparisonResult.actions.some(a => a.action !== "skip");
 
   if (!needsCopy) {
     console.log("\nNo agent statuses need to be copied - all statuses match");
     return;
+  }
+
+  if (toCreate.length > 0) {
+    console.log("\n[WARNING] Agent statuses cannot be deleted once created.");
   }
 
   const shouldContinue = await CliUtil.promptContinue("Proceed with copying agent statuses?");
