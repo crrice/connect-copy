@@ -45,7 +45,7 @@ node dist/index.js     # Run CLI
 | Views | ✅ Done | Has `--include-aws-managed` flag |
 | Flows & Modules | ✅ Done | Main copy command, uses two-pass approach |
 | Quick Connects | ✅ Done | Syncs queue associations |
-| Prompts | ❌ Todo | Audio file handling |
+| Prompts | 🔮 Future | Audio file handling; most clients manage externally |
 
 ### Resource Script Pattern
 
