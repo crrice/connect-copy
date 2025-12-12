@@ -1,13 +1,13 @@
 
-import { createInterface } from "readline";
 import { readFile } from "fs/promises";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { cliFlags } from "./cli-flags.js";
 import { reportResourceDifferences, compareAndValidateFlows, setupInstanceComparison } from "./report.js";
 import { createBackup } from "./backup.js";
-import { createContactFlow, createContactFlowModule, updateContactFlowModuleContent, updateContactFlowContent, updateContactFlowMetadata, updateContactFlowModuleMetadata, calculateTagDiff, updateResourceTags } from "./connect/operations.js";
+import { createContactFlow, createContactFlowModule, updateContactFlowModuleContent, updateContactFlowContent, updateContactFlowMetadata, updateContactFlowModuleMetadata, updateResourceTags } from "./connect/operations.js";
 import { replaceArnsInContent } from "./arn-replacement.js";
+import * as CliUtil from "./utils/cli-utils.js";
 
 import type { ConnectClient, ContactFlowType, ContactFlowSummary, ContactFlowModuleSummary, ContactFlow, ContactFlowModule } from "@aws-sdk/client-connect";
 import type { FlowComparisonResult } from "./report.js";
@@ -44,53 +44,19 @@ const FLOW_TYPE_TO_TEMPLATE: Record<ContactFlowType, string> = {
 };
 
 
-async function promptContinue(message: string): Promise<boolean> {
-  const rl = createInterface({
-    input: process.stdin,
-    output: process.stdout
-  });
-
-  return new Promise(resolve => {
-    rl.question(`\n${message} (y/n): `, answer => {
-      rl.close();
-      resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
-    });
-  });
+function generateModuleStubContent(): Promise<string> {
+  return readFile(join(PROJECT_ROOT, 'templates/modules/default-module-content.json'), 'utf-8');
 }
 
 
-async function promptConfirm(message: string): Promise<boolean> {
-  const rl = createInterface({
-    input: process.stdin,
-    output: process.stdout
-  });
-
-  return new Promise(resolve => {
-    rl.question(`\n${message}\nType "confirm" to proceed: `, answer => {
-      rl.close();
-      resolve(answer.toLowerCase() === 'confirm');
-    });
-  });
-}
-
-
-async function generateModuleStubContent(): Promise<string> {
-  const templatePath = join(PROJECT_ROOT, 'templates/modules/default-module-content.json');
-  const templateContent = await readFile(templatePath, 'utf-8');
-  return templateContent;
-}
-
-
-async function generateFlowStubContent(flowType: ContactFlowType): Promise<string> {
+function generateFlowStubContent(flowType: ContactFlowType): Promise<string> {
   const templateRelativePath = FLOW_TYPE_TO_TEMPLATE[flowType];
 
   if (!templateRelativePath) {
     throw new Error(`Unsupported flow type: ${flowType}`);
   }
 
-  const templatePath = join(PROJECT_ROOT, templateRelativePath);
-  const templateContent = await readFile(templatePath, 'utf-8');
-  return templateContent;
+  return readFile(join(PROJECT_ROOT, templateRelativePath), 'utf-8');
 }
 
 
@@ -196,14 +162,9 @@ async function updateModuleContents(targetClient: ConnectClient, targetInstanceI
       );
     }
 
-    const tagDiff = calculateTagDiff(sourceModule.Tags, targetModule.Tags);
-    if (Object.keys(tagDiff.toAdd).length > 0 || tagDiff.toRemove.length > 0) {
-      await updateResourceTags(
-        targetClient,
-        targetModuleSummary.Arn!,
-        tagDiff.toAdd,
-        tagDiff.toRemove
-      );
+    const { toAdd, toRemove } = CliUtil.getRecordDiff(sourceModule.Tags, targetModule.Tags);
+    if (Object.keys(toAdd).length > 0 || toRemove.length > 0) {
+      await updateResourceTags(targetClient, targetModuleSummary.Arn!, toAdd, toRemove);
     }
 
     console.log(`  Updated content for existing module: ${sourceModule.Name}`);
@@ -268,14 +229,9 @@ async function updateFlowContents(targetClient: ConnectClient, targetInstanceId:
       );
     }
 
-    const tagDiff = calculateTagDiff(sourceFlow.Tags, targetFlow.Tags);
-    if (Object.keys(tagDiff.toAdd).length > 0 || tagDiff.toRemove.length > 0) {
-      await updateResourceTags(
-        targetClient,
-        targetFlowSummary.Arn!,
-        tagDiff.toAdd,
-        tagDiff.toRemove
-      );
+    const { toAdd, toRemove } = CliUtil.getRecordDiff(sourceFlow.Tags, targetFlow.Tags);
+    if (Object.keys(toAdd).length > 0 || toRemove.length > 0) {
+      await updateResourceTags(targetClient, targetFlowSummary.Arn!, toAdd, toRemove);
     }
 
     console.log(`  Updated content for existing flow: ${sourceFlow.Name}`);
@@ -342,7 +298,7 @@ export async function copyFlows(options: CopyFlowsOptions) {
   const hasMissingResources = reportResourceDifferences(sourceInventory, targetInventory);
 
   if (hasMissingResources && !cliFlags.yes) {
-    const shouldContinue = await promptContinue("Continue to flow validation?");
+    const shouldContinue = await CliUtil.promptContinue("Continue to flow validation?");
     if (!shouldContinue) {
       console.log("Validation cancelled by user");
       process.exit(0);
@@ -370,7 +326,7 @@ export async function copyFlows(options: CopyFlowsOptions) {
   displayCopyPlan(comparisonResult);
 
   if (!cliFlags.yes) {
-    const shouldProceed = await promptConfirm("Proceed with copy? This will create/update flows in the target instance.");
+    const shouldProceed = await CliUtil.promptContinue("Proceed with copy? This will create/update flows in the target instance.");
     if (!shouldProceed) {
       console.log("Copy cancelled by user");
       process.exit(0);

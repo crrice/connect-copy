@@ -75,35 +75,6 @@ export async function updateContactFlowModuleMetadata(client: ConnectClient, ins
 }
 
 
-interface TagDiff {
-  toAdd: Record<string, string>;
-  toRemove: string[];
-}
-
-
-export function calculateTagDiff(sourceTags?: Record<string, string>, targetTags?: Record<string, string>): TagDiff {
-  const source = sourceTags ?? {};
-  const target = targetTags ?? {};
-
-  const toAdd: Record<string, string> = {};
-  const toRemove: string[] = [];
-
-  for (const [key, value] of Object.entries(source)) {
-    if (target[key] !== value) {
-      toAdd[key] = value;
-    }
-  }
-
-  for (const key of Object.keys(target)) {
-    if (!(key in source)) {
-      toRemove.push(key);
-    }
-  }
-
-  return { toAdd, toRemove };
-}
-
-
 export async function updateResourceTags(client: ConnectClient, resourceArn: string, toAdd: Record<string, string>, toRemove: string[]) {
   if (Object.keys(toAdd).length > 0) {
     await client.send(new TagResourceCommand({
