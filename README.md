@@ -58,6 +58,8 @@ Create two configuration files: one for source and one for target instance.
   - `hierarchyGroupFilters` - Filter user hierarchy groups
   - `securityProfileFilters` - Filter security profiles
   - `queueFilters` - Filter queues
+  - `routingProfileFilters` - Filter routing profiles
+  - `quickConnectFilters` - Filter quick connects
 
 ### Source Configuration (`source-config.json`)
 
@@ -307,8 +309,10 @@ In addition to the main flow copy command, the tool provides separate commands f
 3. `copy-hierarchy-groups` - No dependencies
 4. `copy-security-profiles` - Depends on hierarchy groups
 5. `copy-queues` - Depends on hours of operation (and optionally flows)
-6. `copy-views` - No dependencies
-7. `copy` (main command) - Copies flows and modules
+6. `copy-routing-profiles` - Depends on queues
+7. `copy-quick-connects` - Depends on users, queues, flows
+8. `copy-views` - No dependencies
+9. `copy` (main command) - Copies flows and modules
 
 ### Copy Hours of Operation
 
@@ -381,6 +385,32 @@ Options:
 
 Note: Phone numbers and email addresses cannot be copied (environment-specific). Quick connect associations are handled by a separate command.
 
+### Copy Routing Profiles
+
+```bash
+connect-flow-copy copy-routing-profiles \
+  --source-config ./source-config.json \
+  --target-config ./target-config.json \
+  --source-profile default \
+  --target-profile default \
+  [--verbose]
+```
+
+Note: Queues must exist in target before copying routing profiles.
+
+### Copy Quick Connects
+
+```bash
+connect-flow-copy copy-quick-connects \
+  --source-config ./source-config.json \
+  --target-config ./target-config.json \
+  --source-profile default \
+  --target-profile default \
+  [--verbose]
+```
+
+Note: Syncs queue associations. Users, queues, and flows referenced by quick connects must exist in target.
+
 ### Copy Views
 
 ```bash
@@ -389,12 +419,10 @@ connect-flow-copy copy-views \
   --target-config ./target-config.json \
   --source-profile default \
   --target-profile default \
-  [--include-aws-managed] \
   [--verbose]
 ```
 
-Options:
-- `--include-aws-managed` - Include AWS managed views (default: skip)
+Note: AWS-managed views cannot be created or have content updated; only their tags are synced if the view exists in both instances.
 
 ### Report Command
 
