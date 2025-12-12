@@ -41,7 +41,7 @@ node dist/index.js     # Run CLI
 | User Hierarchy Groups | ✅ Done | Has `--force-hierarchy-recreate` flag |
 | Security Profiles | ✅ Done | APPLICATIONS field requires manual config |
 | Queues | ✅ Done | Has `--skip-outbound-flow` flag |
-| Routing Profiles | 🔶 Initial | Implemented, needs production testing |
+| Routing Profiles | ✅ Done | Depends on queues |
 | Views | ✅ Done | Has `--include-aws-managed` flag |
 | Flows & Modules | ✅ Done | Main copy command, uses two-pass approach |
 | Quick Connects | ✅ Done | Syncs queue associations |
