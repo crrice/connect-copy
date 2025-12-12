@@ -3,7 +3,7 @@
 import { Command } from "commander";
 import { setCliFlags } from "./cli-flags.js";
 import { copyFlows } from "./copy-flows.js";
-import { copyViews } from "./copy-views.js";
+import { copyViews } from "./resources/views/copy.js";
 import { copyAgentStatuses } from "./resources/agent-statuses/copy.js";
 import { copyHoursOfOperations } from "./resources/hours-of-operation/copy.js";
 import { copyHierarchyGroups } from "./resources/hierarchy-groups/copy.js";
@@ -56,7 +56,6 @@ program
   .requiredOption("--target-config <path>", "Path to target configuration file")
   .requiredOption("--source-profile <profile>", "AWS profile for source account")
   .requiredOption("--target-profile <profile>", "AWS profile for target account")
-  .option("--include-aws-managed", "Include AWS managed views", false)
   .option("--verbose", "Enable detailed logging", false)
   .action((options) => {
     setCliFlags({ publish: true, yes: false, verbose: options.verbose });

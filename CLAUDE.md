@@ -42,7 +42,7 @@ node dist/index.js     # Run CLI
 | Security Profiles | ✅ Done | APPLICATIONS field requires manual config |
 | Queues | ✅ Done | Has `--skip-outbound-flow` flag |
 | Routing Profiles | ✅ Done | Depends on queues |
-| Views | ✅ Done | Has `--include-aws-managed` flag |
+| Views | ✅ Done | AWS-managed views: tags only |
 | Flows & Modules | ✅ Done | Main copy command, uses two-pass approach |
 | Quick Connects | ✅ Done | Syncs queue associations |
 | Prompts | 🔮 Future | Audio file handling; most clients manage externally |
@@ -181,7 +181,7 @@ Note: Filters only apply to source config.
 | `copy-queues` | `--skip-outbound-flow` | STANDARD only; phone/email manual |
 | `copy-routing-profiles` | | Depends on queues |
 | `copy-quick-connects` | | Depends on users, queues, flows |
-| `copy-views` | `--include-aws-managed` | |
+| `copy-views` | | AWS-managed: tags only |
 
 ## Known Limitations
 
