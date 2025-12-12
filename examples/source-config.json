@@ -1,0 +1,12 @@
+{
+  "instanceId": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+  "region": "us-east-1",
+  "flowFilters": {
+    "include": ["*"],
+    "exclude": ["Test_*", "Draft_*"]
+  },
+  "moduleFilters": {
+    "include": ["*"],
+    "exclude": []
+  }
+}

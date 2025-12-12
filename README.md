@@ -1,34 +1,18 @@
 # Amazon Connect Flow Copy Tool
 
-A TypeScript CLI tool to safely copy contact flows and flow modules between Amazon Connect instances (e.g., dev → prod). Supports copying between instances in the same or different AWS accounts and regions.
-
-## Terminology
-
-Throughout this tool and codebase, we use specific terminology to distinguish between different types of Amazon Connect objects:
-
-- **Flows** - Contact flows and flow modules (the things being copied)
-- **Resources** - Supporting resources like queues, prompts, routing profiles, hours of operation, quick connects, security profiles, user hierarchies, and agent statuses (used for validation)
-- **Instance Inventory** - Complete inventory of an Amazon Connect instance, combining both flows and resources
-
-Note: When we say "resources" in this project, we specifically mean the supporting resources listed above, NOT flows or modules.
+A CLI tool to copy contact flows and supporting resources between Amazon Connect instances. Supports cross-account and cross-region copying.
 
 ## Features
 
-- **Safe by Design**: Read-only access to source, writes to target only after explicit confirmation
-- **Injective Operation**: Copies source to target without deleting extras in target
-- **Cross-Account Support**: Copy between different AWS accounts and regions
-- **Smart Validation**: Validates all dependencies before making any changes
+- **Safe**: Validates dependencies before changes, requires confirmation, creates backups
+- **Injective**: Copies source to target without deleting extras in target
 - **Idempotent**: Safe to re-run after partial failures
-- **Detailed Reporting**: Shows exactly what will change before execution
-- **Flexible Filtering**: Copy all flows or specific flows matching patterns
 
 ## Prerequisites
 
-- Node.js 18 or later
-- AWS credentials configured for both source and target accounts
-- Appropriate Amazon Connect permissions:
-  - **Source**: Read permissions for Connect resources
-  - **Target**: Read and write permissions for Connect resources
+- Node.js 18+
+- AWS credentials for both accounts
+- Connect read permissions on source, read/write on target
 
 ## Installation
 
@@ -36,32 +20,9 @@ Note: When we say "resources" in this project, we specifically mean the supporti
 npm install -g connect-flow-copy
 ```
 
-Or run directly with npx:
-
-```bash
-npx connect-flow-copy [options]
-```
-
 ## Configuration
 
-Create two configuration files: one for source and one for target instance.
-
-**Configuration Fields:**
-- `instanceId` - Amazon Connect instance ID (UUID format, lowercase required)
-- `region` - AWS region (e.g., "us-east-1", "us-west-2")
-- Filter patterns (source config only):
-  - `flowFilters` - Filter contact flows
-  - `moduleFilters` - Filter flow modules
-  - `viewFilters` - Filter views
-  - `agentStatusFilters` - Filter agent statuses
-  - `hoursFilters` - Filter hours of operation
-  - `hierarchyGroupFilters` - Filter user hierarchy groups
-  - `securityProfileFilters` - Filter security profiles
-  - `queueFilters` - Filter queues
-  - `routingProfileFilters` - Filter routing profiles
-  - `quickConnectFilters` - Filter quick connects
-
-### Source Configuration (`source-config.json`)
+Create source and target config files. See `examples/` directory for samples.
 
 ```json
 {
@@ -69,403 +30,79 @@ Create two configuration files: one for source and one for target instance.
   "region": "us-east-1",
   "flowFilters": {
     "include": ["*"],
-    "exclude": ["Test_*", "Draft_*"]
-  },
-  "moduleFilters": {
-    "include": ["*"],
-    "exclude": []
+    "exclude": ["Test_*"]
   }
 }
 ```
 
-### Target Configuration (`target-config.json`)
-
-```json
-{
-  "instanceId": "11111111-2222-3333-4444-555555555555",
-  "region": "us-east-1"
-}
-```
-
-**Important**: Filters (`flowFilters`, `moduleFilters`, `viewFilters`) only apply to the source configuration. They determine which resources to select from the source instance. The target configuration only specifies the destination instance.
-
-### Filter Patterns
-
-- `*` matches all flows
-- `Test_*` matches flows starting with "Test_"
-- Use `include` to specify which flows to copy
-- Use `exclude` to skip specific flows
-
-Example configs are available in the `examples/` directory.
+Filters (`flowFilters`, `moduleFilters`, etc.) only apply to source config. Target config only needs `instanceId` and `region`.
 
 ## Usage
 
-### Basic Usage
-
 ```bash
-connect-flow-copy \
-  --source-config ./source-config.json \
-  --target-config ./target-config.json \
-  --source-profile default \
-  --target-profile default
+connect-flow-copy copy \
+  --source-config ./source.json \
+  --target-config ./target.json \
+  --source-profile dev \
+  --target-profile prod
 ```
 
-### Cross-Account Copy
+### Options for `copy` command
 
-```bash
-connect-flow-copy \
-  --source-config ./source-config.json \
-  --target-config ./target-config.json \
-  --source-profile dev-account \
-  --target-profile prod-account
-```
-
-### Keep Flows as SAVED (Don't Auto-Publish)
-
-```bash
-connect-flow-copy \
-  --source-config ./source-config.json \
-  --target-config ./target-config.json \
-  --source-profile default \
-  --target-profile default \
-  --no-publish
-```
-
-### CLI Options
-
-| Option | Required | Description |
-|--------|----------|-------------|
-| `--source-config` | Yes | Path to source configuration file |
-| `--target-config` | Yes | Path to target configuration file |
-| `--source-profile` | Yes | AWS profile for source account |
-| `--target-profile` | Yes | AWS profile for target account |
-| `--no-publish` | No | Keep all flows as SAVED regardless of source state |
-| `--verbose` | No | Enable detailed logging |
+| Option | Description |
+|--------|-------------|
+| `--source-config` | Path to source configuration file (required) |
+| `--target-config` | Path to target configuration file (required) |
+| `--source-profile` | AWS profile for source account (required) |
+| `--target-profile` | AWS profile for target account (required) |
+| `--no-publish` | Keep flows as SAVED regardless of source state |
+| `-y, --yes` | Auto-confirm all prompts |
+| `--verbose` | Enable detailed logging |
 
 ## How It Works
 
-The tool operates in three phases:
+1. **Validation** - Reads both instances, reports differences, validates dependencies. Exits if validation fails.
+2. **Confirmation** - Shows what will be created/updated. Requires confirmation (unless `-y`).
+3. **Execution** - Backs up existing flows, creates stubs, updates content, publishes if source was published.
 
-### Phase 1: Validation
+The tool handles circular flow references via two-pass creation (stubs first, then content).
 
-The tool reads from both instances and:
-- Reports resource differences (missing queues, prompts, etc.)
-- Compares flow/module content to identify what needs copying
-- Validates dependencies only for flows/modules that differ
-- Checks target instance permissions
+## Resource Commands
 
-**If validation fails, the tool exits without making any changes.**
-
-### Phase 2: User Confirmation
-
-The tool displays a detailed report showing:
-- Modules to be created
-- Flows to be created
-- Flows to be updated (explicitly listing each flow that will be overwritten)
-- Any name collisions (resources with same name but different content)
-
-You must confirm before any changes are made.
-
-### Phase 3: Execution
-
-1. **Flow modules** are created/updated first (flows may reference them)
-2. **Contact flows** are created as stubs, then updated with actual content
-3. Flows are published if source was published (unless `--no-publish` is used)
-
-The tool is idempotent - it skips creating resources that already exist and skips updating flows that already have matching content.
-
-## Resource Matching
-
-### Name-Based Resources
-
-These resources are matched between instances by **name**:
-- Queues
-- Routing profiles
-- Hours of operation
-- Prompts
-- Contact flows
-- Contact flow modules
-- Quick connects
-- Security profiles
-- User hierarchies
-- Agent statuses
-- Views
-
-### Environment-Specific Resources
-
-These resources **cannot** be automatically matched and must exist in target:
-- Lambda functions
-- Lex bots
-- Customer Profiles domains
-- S3 buckets
-- Task templates
-
-**Important**: If the tool finds references to target resources that don't exist, it will report an error and exit. You must create these resources in the target instance before running the tool.
-
-### Tag Handling
-
-Resources are copied injectively (extras in target preserved), but **tags are updated bijectively** - tags on updated resources match source exactly (added, removed, or changed as needed).
-
-## Output Files
-
-The tool generates a mapping file for audit purposes:
-
-```
-mapping-2025-10-13T10-30-00Z.json
-```
-
-This file contains:
-- Timestamp of execution
-- Source and target instance details
-- Complete mapping of all ARNs (flows, modules, queues, lambdas, etc.)
-
-## Handling Failures
-
-### Pre-Flight Validation Failures
-
-If validation fails (missing dependencies, permission issues, etc.), the tool exits without making any changes.
-
-### Partial Failures During Execution
-
-If the tool fails during execution:
-- It reports exactly what succeeded and what failed
-- Target instance may have stub flows or partially updated flows
-- **Simply re-run the tool** - it's idempotent and will complete the operation
-- No automatic cleanup or rollback is performed
-
-## Important Notes
-
-### Name Collisions
-
-If the target has a resource with the same name as source but different content, **the tool will overwrite it**. The confirmation report explicitly lists all resources that will be overwritten. Review this carefully before confirming.
-
-### Circular Dependencies
-
-Contact flows can reference each other (e.g., Flow A transfers to Flow B, which transfers back to Flow A). The tool handles this by creating flows in two passes:
-1. Create stub flows to obtain target ARNs
-2. Update flows with actual content using mapped ARNs
-
-### State Preservation
-
-The tool preserves:
-- Flow descriptions and metadata
-- Flow tags
-- Flow state (SAVED/PUBLISHED) unless `--no-publish` is used
-
-## Examples
-
-### Copy All Flows Between Same Account
-
-```bash
-connect-flow-copy \
-  --source-config ./dev-config.json \
-  --target-config ./prod-config.json \
-  --source-profile default \
-  --target-profile default
-```
-
-### Copy Specific Flows Between Accounts
-
-Source config with filters:
-```json
-{
-  "instanceId": "...",
-  "region": "us-east-1",
-  "flowFilters": {
-    "include": ["CustomerService_*", "Support_*"],
-    "exclude": ["*_Test"]
-  }
-}
-```
-
-```bash
-connect-flow-copy \
-  --source-config ./source-config.json \
-  --target-config ./target-config.json \
-  --source-profile dev \
-  --target-profile prod \
-  --verbose
-```
-
-### Copy Without Publishing
-
-```bash
-connect-flow-copy \
-  --source-config ./source-config.json \
-  --target-config ./target-config.json \
-  --source-profile default \
-  --target-profile default \
-  --no-publish
-```
-
-## Resource Copy Commands
-
-In addition to the main flow copy command, the tool provides separate commands for copying supporting resources. These should be run before copying flows to ensure all dependencies exist in the target.
+Copy supporting resources before copying flows. All commands share the same four required options (`--source-config`, `--target-config`, `--source-profile`, `--target-profile`).
 
 ### Recommended Order
 
-1. `copy-hours-of-operation` - No dependencies
-2. `copy-agent-statuses` - No dependencies
-3. `copy-hierarchy-groups` - No dependencies
-4. `copy-security-profiles` - Depends on hierarchy groups
-5. `copy-queues` - Depends on hours of operation (and optionally flows)
-6. `copy-routing-profiles` - Depends on queues
-7. `copy-quick-connects` - Depends on users, queues, flows
-8. `copy-views` - No dependencies
-9. `copy` (main command) - Copies flows and modules
-
-### Copy Hours of Operation
-
-```bash
-connect-flow-copy copy-hours-of-operation \
-  --source-config ./source-config.json \
-  --target-config ./target-config.json \
-  --source-profile default \
-  --target-profile default \
-  [--verbose]
-```
-
-### Copy Agent Statuses
-
-Copies custom agent statuses (system statuses are not copied).
-
-```bash
-connect-flow-copy copy-agent-statuses \
-  --source-config ./source-config.json \
-  --target-config ./target-config.json \
-  --source-profile default \
-  --target-profile default \
-  [--verbose]
-```
-
-### Copy User Hierarchy Groups
-
-```bash
-connect-flow-copy copy-hierarchy-groups \
-  --source-config ./source-config.json \
-  --target-config ./target-config.json \
-  --source-profile default \
-  --target-profile default \
-  [--force-hierarchy-recreate] \
-  [--verbose]
-```
-
-Options:
-- `--force-hierarchy-recreate` - Allow deleting and recreating groups with parent mismatches (WARNING: permanently severs historical contact data)
-
-### Copy Security Profiles
-
-```bash
-connect-flow-copy copy-security-profiles \
-  --source-config ./source-config.json \
-  --target-config ./target-config.json \
-  --source-profile default \
-  --target-profile default \
-  [--verbose]
-```
-
-Note: The APPLICATIONS field cannot be copied via AWS API and must be configured manually.
-
-### Copy Queues
-
-Copies STANDARD queues only (AGENT queues are auto-created by Amazon Connect).
-
-```bash
-connect-flow-copy copy-queues \
-  --source-config ./source-config.json \
-  --target-config ./target-config.json \
-  --source-profile default \
-  --target-profile default \
-  [--skip-outbound-flow] \
-  [--verbose]
-```
-
-Options:
-- `--skip-outbound-flow` - Skip outbound whisper flow configuration (use when flows haven't been copied yet)
-
-Note: Phone numbers and email addresses cannot be copied (environment-specific). Quick connect associations are handled by a separate command.
-
-### Copy Routing Profiles
-
-```bash
-connect-flow-copy copy-routing-profiles \
-  --source-config ./source-config.json \
-  --target-config ./target-config.json \
-  --source-profile default \
-  --target-profile default \
-  [--verbose]
-```
-
-Note: Queues must exist in target before copying routing profiles.
-
-### Copy Quick Connects
-
-```bash
-connect-flow-copy copy-quick-connects \
-  --source-config ./source-config.json \
-  --target-config ./target-config.json \
-  --source-profile default \
-  --target-profile default \
-  [--verbose]
-```
-
-Note: Syncs queue associations. Users, queues, and flows referenced by quick connects must exist in target.
-
-### Copy Views
-
-```bash
-connect-flow-copy copy-views \
-  --source-config ./source-config.json \
-  --target-config ./target-config.json \
-  --source-profile default \
-  --target-profile default \
-  [--verbose]
-```
-
-Note: AWS-managed views cannot be created or have content updated; only their tags are synced if the view exists in both instances.
+| Order | Command | Dependencies | Notes |
+|-------|---------|--------------|-------|
+| 1 | `copy-hours-of-operation` | None | |
+| 2 | `copy-agent-statuses` | None | System statuses excluded |
+| 3 | `copy-hierarchy-groups` | None | `--force-hierarchy-recreate`, `--force-structure-update` |
+| 4 | `copy-security-profiles` | Hierarchy groups | APPLICATIONS field requires manual config |
+| 5 | `copy-queues --skip-outbound-flow` | Hours of operation | STANDARD queues only |
+| 6 | `copy-routing-profiles` | Queues | |
+| 7 | `copy-views` | None | AWS-managed views: tags only |
+| 8 | `copy` | All above | Main flow/module copy |
+| 9 | `copy-queues` | Flows | Sets outbound whisper flows |
+| 10 | `copy-quick-connects` | Users, queues, flows | Syncs queue associations |
 
 ### Report Command
 
-Run validation without making changes:
+Validate without making changes:
 
 ```bash
-connect-flow-copy report \
-  --source-config ./source-config.json \
-  --target-config ./target-config.json \
-  --source-profile default \
-  --target-profile default \
-  [--resources-only] \
-  [--verbose]
+connect-flow-copy report [options] [--resources-only]
 ```
 
-Options:
-- `--resources-only` - Only report resource differences, skip flow validation
+## Resource Matching
 
-## Troubleshooting
+Resources are matched by **name** between instances: queues, routing profiles, hours of operation, prompts, flows, modules, quick connects, security profiles, user hierarchies, agent statuses, views.
 
-### "Missing resource" errors
+**Environment-specific resources** (Lambda functions, Lex bots, S3 buckets, Customer Profiles domains, task templates) must pre-exist in target with matching names.
 
-**Cause**: Target instance is missing queues, prompts, or other resources referenced by flows.
+**Tags** are updated bijectively on modified resources (source tags replace target tags exactly).
 
-**Solution**: Create the missing resources in target instance before running the tool.
-
-### "Permission denied" errors
-
-**Cause**: AWS credentials lack necessary permissions.
-
-**Solution**: Ensure credentials have:
-- Connect read permissions on source
-- Connect read/write permissions on target
-
-### Partial completion
-
-**Cause**: Tool failed during execution.
-
-**Solution**: Review the error message, fix any issues, and re-run the tool. It's idempotent and will complete the operation.
-
-## Support
-
-For issues or questions, please open an issue in the GitHub repository.
+**Name collisions**: If target has a resource with the same name but different content, it will be overwritten. Review the confirmation report carefully.
 
 ## License
 
