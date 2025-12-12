@@ -217,7 +217,9 @@ const SourceConfigValidator = V.shape({
   securityProfileFilters: FilterValidator.optional,
   queueFilters: FilterValidator.optional,
   routingProfileFilters: FilterValidator.optional,
-  quickConnectFilters: FilterValidator.optional
+  quickConnectFilters: FilterValidator.optional,
+
+  phoneNumberMappings: V.mapOf(V.oneOf(V.string.uuid, V.string.regex(/^\+[1-9]\d{1,14}$/))).optional,
 });
 
 
@@ -233,22 +235,7 @@ export function validateSourceConfig(data: unknown): SourceConfig {
     throw new Error(`Invalid source config:\n${errors.join('\n')}`);
   }
 
-  const config = data as SourceConfig;
-
-  // Validate phoneNumberMappings manually (Record<string, string>)
-  if (config.phoneNumberMappings !== undefined) {
-    if (typeof config.phoneNumberMappings !== "object" || config.phoneNumberMappings === null) {
-      throw new Error("Invalid source config: phoneNumberMappings must be an object");
-    }
-
-    for (const [key, value] of Object.entries(config.phoneNumberMappings)) {
-      if (typeof key !== "string" || typeof value !== "string") {
-        throw new Error("Invalid source config: phoneNumberMappings must be Record<string, string>");
-      }
-    }
-  }
-
-  return config;
+  return data;
 }
 
 
