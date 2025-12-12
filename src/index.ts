@@ -16,8 +16,8 @@ import { runReport } from "./report.js";
 const program = new Command();
 
 program
-  .name("connect-flow-copy")
-  .description("Copy contact flows and flow modules between Amazon Connect instances")
+  .name("connect-copy")
+  .description("Copy contact flows and supporting resources between Amazon Connect instances")
   .version("1.0.0");
 
 program

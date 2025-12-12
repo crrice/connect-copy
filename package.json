@@ -1,12 +1,17 @@
 {
-  "name": "connect-flow-copy",
+  "name": "@crrice/connect-copy",
   "version": "1.0.0",
   "type": "module",
-  "description": "A TypeScript CLI tool to safely copy contact flows and flow modules between Amazon Connect instances (e.g., dev → prod). Supports copying between instances in the same or different AWS accounts and regions.",
+  "description": "CLI tool to copy contact flows and supporting resources between Amazon Connect instances.",
   "main": "dist/index.js",
   "bin": {
-    "connect-flow-copy": "dist/index.js"
+    "connect-copy": "dist/index.js"
   },
+  "files": [
+    "dist",
+    "templates",
+    "examples"
+  ],
   "scripts": {
     "build": "tsc",
     "watch": "tsc --watch",
@@ -17,10 +22,16 @@
     "aws",
     "amazon-connect",
     "contact-flow",
-    "cli",
-    "typescript"
+    "cli"
   ],
-  "author": "",
+  "author": "Conor Rice",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/crrice/connect-copy.git"
+  },
+  "engines": {
+    "node": ">=18"
+  },
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^24.7.2",

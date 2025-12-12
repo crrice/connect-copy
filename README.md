@@ -17,7 +17,7 @@ A CLI tool to copy contact flows and supporting resources between Amazon Connect
 ## Installation
 
 ```bash
-npm install -g connect-flow-copy
+npm install -g @crrice/connect-copy
 ```
 
 ## Configuration
@@ -40,7 +40,7 @@ Filters (`flowFilters`, `moduleFilters`, etc.) only apply to source config. Targ
 ## Usage
 
 ```bash
-connect-flow-copy copy \
+connect-copy copy \
   --source-config ./source.json \
   --target-config ./target.json \
   --source-profile dev \
@@ -91,7 +91,7 @@ Copy supporting resources before copying flows. All commands share the same four
 Validate without making changes:
 
 ```bash
-connect-flow-copy report [options] [--resources-only]
+connect-copy report [options] [--resources-only]
 ```
 
 ## Resource Matching
