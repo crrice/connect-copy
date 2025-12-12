@@ -98,7 +98,26 @@ connect-copy report [options] [--resources-only]
 
 Resources are matched by **name** between instances: queues, routing profiles, hours of operation, prompts, flows, modules, quick connects, security profiles, user hierarchies, agent statuses, views.
 
-**Environment-specific resources** (Lambda functions, Lex bots, S3 buckets, Customer Profiles domains, task templates) must pre-exist in target with matching names.
+**Environment-specific resources** (Lambda functions, Lex bots, S3 buckets, Customer Profiles domains, task templates) must pre-exist in target. ARNs can be transformed using config options:
+
+```json
+{
+  "instanceId": "...",
+  "region": "us-east-1",
+  "arnMappings": {
+    "arn:aws:lambda:us-east-1:111:function:special-fn": "arn:aws:lambda:us-east-1:222:function:different-name"
+  },
+  "arnPatterns": [
+    { "match": "^(function:.*)-dev$", "replace": "$1-prod" },
+    { "match": "^(bot:.*)-dev$", "replace": "$1-prod" },
+    { "match": "^(s3://.*)-dev/", "replace": "$1-prod/" }
+  ]
+}
+```
+
+`arnMappings` provides explicit full ARN to full ARN replacement.
+
+`arnPatterns` applies regex to the latter portion of the ARN only (e.g., `function:my-fn-dev` or `function:my-fn:$LATEST` for Lambda, `bot:my-bot` for Lex) - the region and account are preserved automatically. Uses standard JavaScript regex with capture group replacement (`$1`, `$2`, etc.).
 
 **Tags** are updated bijectively on modified resources (source tags replace target tags exactly).
 

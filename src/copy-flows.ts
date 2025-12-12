@@ -6,7 +6,7 @@ import { cliFlags } from "./cli-flags.js";
 import { reportResourceDifferences, compareAndValidateFlows, setupInstanceComparison } from "./report.js";
 import { createBackup } from "./backup.js";
 import { createContactFlow, createContactFlowModule, updateContactFlowModuleContent, updateContactFlowContent, updateContactFlowMetadata, updateContactFlowModuleMetadata, updateResourceTags } from "./connect/operations.js";
-import { replaceArnsInContent } from "./arn-replacement.js";
+import { replaceArnsInContent, buildExternalArnMappings } from "./arn-replacement.js";
 import * as CliUtil from "./utils/cli-utils.js";
 
 import type { ConnectClient, ContactFlowType, ContactFlowSummary, ContactFlowModuleSummary, ContactFlow, ContactFlowModule } from "@aws-sdk/client-connect";
@@ -353,12 +353,32 @@ export async function copyFlows(options: CopyFlowsOptions) {
     comparisonResult.validationResult.sourceFlowDetails
   );
 
+  // Build external ARN mappings (Lambda, Lex, S3) from flow/module content
+  const allContents = [
+    ...[...comparisonResult.validationResult.sourceFlowDetails.values()].map(f => f.Content ?? ""),
+    ...[...comparisonResult.validationResult.sourceModuleDetails.values()].map(m => m.Content ?? "")
+  ];
+  const externalArnMappings = buildExternalArnMappings(
+    allContents,
+    sourceConfig.arnMappings,
+    sourceConfig.arnPatterns
+  );
+
+  if (externalArnMappings.size > 0) {
+    console.log(`\nExternal ARN mappings: ${externalArnMappings.size}`);
+    for (const [source, target] of externalArnMappings) {
+      console.log(`  ${source}`);
+      console.log(`    → ${target}`);
+    }
+  }
+
   const completeMappings = new Map([
     ...comparisonResult.validationResult.resourceMappings.arnMap,
-    ...createdArnMappings
+    ...createdArnMappings,
+    ...externalArnMappings
   ]);
 
-  console.log(`\nComplete ARN mappings: ${completeMappings.size} total (${comparisonResult.validationResult.resourceMappings.arnMap.size} existing + ${createdArnMappings.size} created)`);
+  console.log(`\nComplete ARN mappings: ${completeMappings.size} total (${comparisonResult.validationResult.resourceMappings.arnMap.size} existing + ${createdArnMappings.size} created + ${externalArnMappings.size} external)`);
 
   await updateModuleContents(
     targetClient,

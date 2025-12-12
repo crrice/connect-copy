@@ -6,6 +6,11 @@ import { buildAllResourceMappings, validateDependencies } from "./mapping.js";
 import type { InstanceInventory, ResourceMappings } from "./mapping.js";
 
 
+export interface ArnPattern {
+  match: string;
+  replace: string;
+}
+
 export interface SourceConfig {
   instanceId: string;
   region: string;
@@ -20,6 +25,8 @@ export interface SourceConfig {
   routingProfileFilters?: FilterConfig;
   quickConnectFilters?: FilterConfig;
   phoneNumberMappings?: Record<string, string>;
+  arnMappings?: Record<string, string>;
+  arnPatterns?: ArnPattern[];
 }
 
 export interface FilterConfig {
@@ -205,6 +212,11 @@ const FilterValidator = V.shape({
 }).noextra;
 
 
+const ArnPatternValidator = V.shape({
+  match: V.string.minLen(1),
+  replace: V.string
+}).noextra;
+
 const SourceConfigValidator = V.shape({
   instanceId: V.string.uuid.regex(/^[0-9a-f-]+$/),
   region: V.string.minLen(1),
@@ -220,6 +232,8 @@ const SourceConfigValidator = V.shape({
   quickConnectFilters: FilterValidator.optional,
 
   phoneNumberMappings: V.mapOf(V.oneOf(V.string.uuid, V.string.regex(/^\+[1-9]\d{1,14}$/))).optional,
+  arnMappings: V.mapOf(V.string.minLen(1)).optional,
+  arnPatterns: V.arrayOf(ArnPatternValidator).optional,
 });
 
 
