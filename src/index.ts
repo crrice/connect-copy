@@ -18,7 +18,7 @@ const program = new Command();
 program
   .name("connect-copy")
   .description("Copy contact flows and supporting resources between Amazon Connect instances")
-  .version("0.1.0");
+  .version("0.2.0");
 
 program
   .command("copy")
