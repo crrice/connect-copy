@@ -172,7 +172,7 @@ Note: Filters only apply to source config.
 
 | Command | Extra Options | Notes |
 |---------|---------------|-------|
-| `copy` | `--no-publish` | Main flow/module copy |
+| `copy` | `--skip`, `--no-publish`, `--yes`, resource-specific flags | Copies all resource types in dependency order |
 | `report` | `--resources-only` | Validate without copying |
 | `copy-hours-of-operation` | | |
 | `copy-agent-statuses` | | System statuses excluded |
@@ -182,6 +182,7 @@ Note: Filters only apply to source config.
 | `copy-routing-profiles` | | Depends on queues |
 | `copy-quick-connects` | | Depends on users, queues, flows |
 | `copy-views` | | AWS-managed: tags only |
+| `copy-flows` | `--no-publish`, `--yes` | Flow/module copy only |
 
 ## Known Limitations
 

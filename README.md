@@ -40,7 +40,15 @@ Filters (`flowFilters`, `moduleFilters`, etc.) only apply to source config. Targ
 ## Usage
 
 ```bash
+# Copy all resources
 connect-copy copy \
+  --source-config ./source.json \
+  --target-config ./target.json \
+  --source-profile dev \
+  --target-profile prod
+
+# Copy everything except flows (sync supporting resources first, flows later)
+connect-copy copy --skip flows \
   --source-config ./source.json \
   --target-config ./target.json \
   --source-profile dev \
@@ -55,9 +63,17 @@ connect-copy copy \
 | `--target-config` | Path to target configuration file (required) |
 | `--source-profile` | AWS profile for source account (required) |
 | `--target-profile` | AWS profile for target account (required) |
+| `--skip <resources>` | Comma-separated resource types to skip |
+| `--skip-outbound-flow` | Skip outbound whisper flow configuration for queues |
+| `--force-hierarchy-recreate` | Allow deleting and recreating hierarchy groups with parent mismatches |
+| `--force-structure-update` | Allow overwriting target hierarchy structure if it differs from source |
 | `--no-publish` | Keep flows as SAVED regardless of source state |
 | `-y, --yes` | Auto-confirm all prompts |
 | `--verbose` | Enable detailed logging |
+
+Valid `--skip` values: `hours-of-operation`, `agent-statuses`, `hierarchy-groups`, `security-profiles`, `queues`, `routing-profiles`, `quick-connects`, `views`, `flows`
+
+Resources are copied in dependency order: hours of operation, agent statuses, hierarchy groups, security profiles, queues, routing profiles, quick connects, views, flows. Each resource displays a comparison plan and prompts for confirmation individually.
 
 ## How It Works
 
@@ -67,24 +83,21 @@ connect-copy copy \
 
 The tool handles circular flow references via two-pass creation (stubs first, then content).
 
-## Resource Commands
+## Individual Resource Commands
 
-Copy supporting resources before copying flows. All commands share the same four required options (`--source-config`, `--target-config`, `--source-profile`, `--target-profile`).
+Each resource type can also be copied individually. All commands share the same four required options (`--source-config`, `--target-config`, `--source-profile`, `--target-profile`).
 
-### Recommended Order
-
-| Order | Command | Dependencies | Notes |
-|-------|---------|--------------|-------|
-| 1 | `copy-hours-of-operation` | None | |
-| 2 | `copy-agent-statuses` | None | System statuses excluded |
-| 3 | `copy-hierarchy-groups` | None | `--force-hierarchy-recreate`, `--force-structure-update` |
-| 4 | `copy-security-profiles` | Hierarchy groups | APPLICATIONS field requires manual config |
-| 5 | `copy-queues --skip-outbound-flow` | Hours of operation | STANDARD queues only |
-| 6 | `copy-routing-profiles` | Queues | |
-| 7 | `copy-views` | None | AWS-managed views: tags only |
-| 8 | `copy` | All above | Main flow/module copy |
-| 9 | `copy-queues` | Flows | Sets outbound whisper flows |
-| 10 | `copy-quick-connects` | Users, queues, flows | Syncs queue associations |
+| Command | Notes |
+|---------|-------|
+| `copy-hours-of-operation` | |
+| `copy-agent-statuses` | System statuses excluded |
+| `copy-hierarchy-groups` | `--force-hierarchy-recreate`, `--force-structure-update` |
+| `copy-security-profiles` | APPLICATIONS field requires manual config |
+| `copy-queues` | `--skip-outbound-flow`; STANDARD queues only |
+| `copy-routing-profiles` | |
+| `copy-quick-connects` | Syncs queue associations |
+| `copy-views` | AWS-managed views: tags only |
+| `copy-flows` | Two-pass flow/module copy with ARN replacement |
 
 ### Report Command
 
