@@ -22,7 +22,7 @@ program
   .version("0.2.1");
 
 program
-  .command("copy")
+  .command("copy-flows")
   .description("Copy contact flows and flow modules between instances")
   .requiredOption("--source-config <path>", "Path to source configuration file")
   .requiredOption("--target-config <path>", "Path to target configuration file")
@@ -51,7 +51,7 @@ program
   });
 
 program
-  .command("copy-all")
+  .command("copy")
   .description("Copy all resource types between instances in dependency order")
   .requiredOption("--source-config <path>", "Path to source configuration file")
   .requiredOption("--target-config <path>", "Path to target configuration file")
