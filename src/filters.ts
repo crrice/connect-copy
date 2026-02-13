@@ -1,10 +1,29 @@
 
-import { minimatch } from "minimatch";
+import { minimatch, Minimatch } from "minimatch";
 
 
 export interface FlowFilters {
   include?: string[];
   exclude?: string[];
+}
+
+
+export function validateFilterPatterns(filters: FlowFilters, filterName: string): string[] {
+  const errors: string[] = [];
+
+  for (const pattern of filters.include ?? []) {
+    if (new Minimatch(pattern).makeRe() === false) {
+      errors.push(`${filterName}.include: invalid pattern "${pattern}"`);
+    }
+  }
+
+  for (const pattern of filters.exclude ?? []) {
+    if (new Minimatch(pattern).makeRe() === false) {
+      errors.push(`${filterName}.exclude: invalid pattern "${pattern}"`);
+    }
+  }
+
+  return errors;
 }
 
 

@@ -2,6 +2,7 @@
 import type { ContactFlowSummary, ContactFlowModuleSummary, ContactFlow, ContactFlowModule } from "@aws-sdk/client-connect";
 import { V } from "@crrice/vali";
 import { extractDependencyArnsFromFlow, categorizeArn } from "./arn-utils.js";
+import { validateFilterPatterns } from "./filters.js";
 import { buildAllResourceMappings, validateDependencies } from "./mapping.js";
 import type { InstanceInventory, ResourceMappings } from "./mapping.js";
 
@@ -207,8 +208,8 @@ export function validateFlowDependencies(sourceInventory: InstanceInventory, tar
 
 
 const FilterValidator = V.shape({
-  include: V.arrayOf(V.string).optional,
-  exclude: V.arrayOf(V.string).optional
+  include: V.arrayOf(V.string.minLen(1)).optional,
+  exclude: V.arrayOf(V.string.minLen(1)).optional
 }).noextra;
 
 
@@ -243,10 +244,28 @@ const TargetConfigValidator = V.shape({
 }).noextra;
 
 
+const FILTER_FIELDS = [
+  "flowFilters", "moduleFilters", "viewFilters", "agentStatusFilters",
+  "hoursFilters", "hierarchyGroupFilters", "securityProfileFilters",
+  "queueFilters", "routingProfileFilters", "quickConnectFilters"
+] as const;
+
+
 export function validateSourceConfig(data: unknown): SourceConfig {
   if (!SourceConfigValidator(data)) {
     const errors = SourceConfigValidator.getErrors();
     throw new Error(`Invalid source config:\n${errors.join('\n')}`);
+  }
+
+  const patternErrors: string[] = [];
+  for (const field of FILTER_FIELDS) {
+    if (data[field]) {
+      patternErrors.push(...validateFilterPatterns(data[field], field));
+    }
+  }
+
+  if (patternErrors.length > 0) {
+    throw new Error(`Invalid filter patterns in source config:\n${patternErrors.join('\n')}`);
   }
 
   return data;
