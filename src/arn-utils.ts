@@ -3,7 +3,7 @@ import type { ContactFlow, ContactFlowModule } from "@aws-sdk/client-connect";
 import { getArnFieldsForActionType } from "./arn-field-mapping.js";
 
 
-const ARN_PATTERN = /arn:aws:connect:[a-z0-9-]+:\d+:instance\/[a-f0-9-]+\/[a-z-]+\/[a-f0-9-]+/g;
+const ARN_PATTERN = /arn:aws:connect:[a-z0-9-]+:\d+:instance\/[a-f0-9-]+(?:\/[a-z-]+\/[a-f0-9-]+|:view\/[a-f0-9-]+(?::(?:\d+|\$LATEST|\$SAVED))?)/g;
 
 
 type TypeofResult = 'string' | 'number' | 'bigint' | 'boolean' | 'symbol' | 'undefined' | 'object' | 'function';

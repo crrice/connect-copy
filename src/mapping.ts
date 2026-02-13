@@ -139,7 +139,7 @@ export function buildAllResourceMappings(source: InstanceInventory, target: Inst
 
 function normalizeViewArn(arn: string): string {
   if (arn.includes(':view/')) {
-    return arn.replace(/:(\d+)$/, '');
+    return arn.replace(/:(\d+|\$LATEST|\$SAVED)$/, '');
   }
 
   return arn;
