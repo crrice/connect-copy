@@ -1,6 +1,6 @@
 {
   "name": "@crrice/connect-copy",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "CLI tool to copy contact flows and supporting resources between Amazon Connect instances.",
   "main": "dist/index.js",
