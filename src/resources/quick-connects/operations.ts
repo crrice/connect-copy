@@ -212,24 +212,37 @@ export async function listQueueQuickConnects(client: ConnectClient, instanceId: 
 export async function associateQueueQuickConnects(client: ConnectClient, instanceId: string, queueId: string, quickConnectIds: string[]): Promise<void> {
   if (quickConnectIds.length === 0) return;
 
-  await client.send(
-    new AssociateQueueQuickConnectsCommand({
-      InstanceId: instanceId,
-      QueueId: queueId,
-      QuickConnectIds: quickConnectIds
-    })
-  );
+  for (const batch of chunk(quickConnectIds, 50)) {
+    await client.send(
+      new AssociateQueueQuickConnectsCommand({
+        InstanceId: instanceId,
+        QueueId: queueId,
+        QuickConnectIds: batch
+      })
+    );
+  }
+}
+
+
+function chunk<T>(array: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < array.length; i += size) {
+    chunks.push(array.slice(i, i + size));
+  }
+  return chunks;
 }
 
 
 export async function disassociateQueueQuickConnects(client: ConnectClient, instanceId: string, queueId: string, quickConnectIds: string[]): Promise<void> {
   if (quickConnectIds.length === 0) return;
 
-  await client.send(
-    new DisassociateQueueQuickConnectsCommand({
-      InstanceId: instanceId,
-      QueueId: queueId,
-      QuickConnectIds: quickConnectIds
-    })
-  );
+  for (const batch of chunk(quickConnectIds, 50)) {
+    await client.send(
+      new DisassociateQueueQuickConnectsCommand({
+        InstanceId: instanceId,
+        QueueId: queueId,
+        QuickConnectIds: batch
+      })
+    );
+  }
 }
