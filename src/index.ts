@@ -11,6 +11,7 @@ import { copySecurityProfiles } from "./resources/security-profiles/copy.js";
 import { copyQueues } from "./resources/queues/copy.js";
 import { copyRoutingProfiles } from "./resources/routing-profiles/copy.js";
 import { copyQuickConnects } from "./resources/quick-connects/copy.js";
+import { copyAll } from "./copy-all.js";
 import { runReport } from "./report.js";
 
 const program = new Command();
@@ -18,7 +19,7 @@ const program = new Command();
 program
   .name("connect-copy")
   .description("Copy contact flows and supporting resources between Amazon Connect instances")
-  .version("0.2.0");
+  .version("0.2.1");
 
 program
   .command("copy")
@@ -47,6 +48,25 @@ program
   .action((options) => {
     setCliFlags({ publish: true, yes: false, verbose: options.verbose });
     runReport(options);
+  });
+
+program
+  .command("copy-all")
+  .description("Copy all resource types between instances in dependency order")
+  .requiredOption("--source-config <path>", "Path to source configuration file")
+  .requiredOption("--target-config <path>", "Path to target configuration file")
+  .requiredOption("--source-profile <profile>", "AWS profile for source account")
+  .requiredOption("--target-profile <profile>", "AWS profile for target account")
+  .option("--skip <resources>", "Comma-separated resource types to skip (e.g. flows,queues)", "")
+  .option("--skip-outbound-flow", "Skip outbound whisper flow configuration for queues", false)
+  .option("--force-hierarchy-recreate", "Allow deleting and recreating hierarchy groups with parent mismatches", false)
+  .option("--force-structure-update", "Allow overwriting target hierarchy structure if it differs from source", false)
+  .option("--no-publish", "Keep all flows as SAVED regardless of source state")
+  .option("-y, --yes", "Auto-confirm all prompts", false)
+  .option("--verbose", "Enable detailed logging", false)
+  .action((options) => {
+    setCliFlags({ publish: options.publish, yes: options.yes, verbose: options.verbose });
+    copyAll(options);
   });
 
 program
