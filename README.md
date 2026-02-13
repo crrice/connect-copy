@@ -85,7 +85,7 @@ The tool handles circular flow references via two-pass creation (stubs first, th
 
 ## Individual Resource Commands
 
-Each resource type can also be copied individually. All commands share the same four required options (`--source-config`, `--target-config`, `--source-profile`, `--target-profile`).
+Each resource type can also be copied individually. All commands share the same four required options (`--source-config`, `--target-config`, `--source-profile`, `--target-profile`) plus optional `-y, --yes` and `--verbose` flags.
 
 | Command | Notes |
 |---------|-------|
@@ -97,7 +97,7 @@ Each resource type can also be copied individually. All commands share the same 
 | `copy-routing-profiles` | |
 | `copy-quick-connects` | Syncs queue associations |
 | `copy-views` | AWS-managed views: tags only |
-| `copy-flows` | Two-pass flow/module copy with ARN replacement |
+| `copy-flows` | `--no-publish`; two-pass flow/module copy with ARN replacement |
 
 ### Report Command
 

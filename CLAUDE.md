@@ -116,7 +116,6 @@ Copy resources in this order to satisfy dependencies:
 3. **Phase 3: Execution**
    - Sync resources in dependency order (modules before flows)
    - Apply two-pass approach for circular dependencies
-   - Generate output mapping file (timestamp-based JSON for audit)
 
 ### Tag Handling
 
@@ -138,12 +137,11 @@ Resources are copied injectively (extras in target preserved), but tags are upda
    - Parse source flow content JSON
    - Replace all ARN references using mappings
    - Update target flow with corrected content using `UpdateContactFlowContent`
-   - Publish flows using `PublishContactFlow` (if needed)
+   - Publishing is implicit: updating without `:$SAVED` suffix activates the flow
 
 ### Key API Operations
 - `CreateContactFlow` - creates flow, returns ARN
-- `UpdateContactFlowContent` - updates flow JSON
-- `PublishContactFlow` - activates updated flow
+- `UpdateContactFlowContent` - updates flow JSON (publishes implicitly unless flow ID has `:$SAVED` suffix)
 - Similar operations for modules: `CreateContactFlowModule`, `UpdateContactFlowModuleContent`
 
 ## CLI Commands
@@ -153,6 +151,7 @@ All commands share these required options:
 - `--target-config <path>` - Path to target config JSON
 - `--source-profile <profile>` - AWS profile for source account
 - `--target-profile <profile>` - AWS profile for target account
+- `-y, --yes` (optional) - Auto-confirm all prompts
 - `--verbose` (optional) - Enable detailed logging
 
 ### Configuration Files
@@ -161,12 +160,15 @@ All commands share these required options:
 - `instanceId` - Amazon Connect instance ID
 - `region` - AWS region
 - `*Filters` - Optional include/exclude patterns (flowFilters, moduleFilters, viewFilters, agentStatusFilters, hoursFilters, hierarchyGroupFilters, securityProfileFilters, queueFilters, routingProfileFilters, quickConnectFilters)
+- `arnMappings` - Optional explicit ARN-to-ARN replacements for environment-specific resources
+- `arnPatterns` - Optional regex patterns for ARN transformation (applied to the type+name portion of the ARN)
+- `phoneNumberMappings` - Optional phone number ID to E.164 number mappings
 
 **Target config**:
 - `instanceId` - Amazon Connect instance ID
 - `region` - AWS region
 
-Note: Filters only apply to source config.
+Note: Filters, ARN mappings, and phone number mappings only apply to source config.
 
 ### Command Reference
 
@@ -176,7 +178,7 @@ Note: Filters only apply to source config.
 | `report` | `--resources-only` | Validate without copying |
 | `copy-hours-of-operation` | | |
 | `copy-agent-statuses` | | System statuses excluded |
-| `copy-hierarchy-groups` | `--force-hierarchy-recreate` | WARNING: severs historical data |
+| `copy-hierarchy-groups` | `--force-hierarchy-recreate`, `--force-structure-update` | WARNING: severs historical data |
 | `copy-security-profiles` | | APPLICATIONS requires manual config |
 | `copy-queues` | `--skip-outbound-flow` | STANDARD only; phone/email manual |
 | `copy-routing-profiles` | | Depends on queues |

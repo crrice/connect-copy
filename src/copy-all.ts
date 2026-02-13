@@ -88,7 +88,7 @@ export async function copyAll(options: CopyAllOptions) {
   }
 
   console.log(`\n${"=".repeat(60)}`);
-  console.log("  copy-all complete");
+  console.log("  copy complete");
   console.log(`${"=".repeat(60)}`);
 }
 
