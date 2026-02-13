@@ -297,7 +297,7 @@ export async function copyFlows(options: CopyFlowsOptions) {
 
   const hasMissingResources = reportResourceDifferences(sourceInventory, targetInventory);
 
-  if (hasMissingResources && !cliFlags.yes) {
+  if (hasMissingResources) {
     const shouldContinue = await CliUtil.promptContinue("Continue to flow validation?");
     if (!shouldContinue) {
       console.log("Validation cancelled by user");
@@ -325,14 +325,10 @@ export async function copyFlows(options: CopyFlowsOptions) {
 
   displayCopyPlan(comparisonResult);
 
-  if (!cliFlags.yes) {
-    const shouldProceed = await CliUtil.promptContinue("Proceed with copy? This will create/update flows in the target instance.");
-    if (!shouldProceed) {
-      console.log("Copy cancelled by user");
-      process.exit(0);
-    }
-  } else {
-    console.log("Auto-confirming copy (--yes flag set)");
+  const shouldProceed = await CliUtil.promptContinue("Proceed with copy? This will create/update flows in the target instance.");
+  if (!shouldProceed) {
+    console.log("Copy cancelled by user");
+    process.exit(0);
   }
 
   console.log("\nPhase 3: Creating backup...");

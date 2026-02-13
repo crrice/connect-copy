@@ -2,6 +2,7 @@
 import { readFile } from "fs/promises";
 import { createInterface } from "readline";
 
+import { cliFlags } from "../cli-flags.js";
 import { validateSourceConfig, validateTargetConfig } from "../validation.js";
 
 import type { SourceConfig, TargetConfig } from "../validation.js";
@@ -11,6 +12,8 @@ import type { FilterConfig } from "../validation.ts";
 
 
 export async function promptContinue(message: string): Promise<boolean> {
+  if (cliFlags.yes) return true;
+
   const rl = createInterface({
     input: process.stdin,
     output: process.stdout

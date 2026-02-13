@@ -76,9 +76,10 @@ program
   .requiredOption("--target-config <path>", "Path to target configuration file")
   .requiredOption("--source-profile <profile>", "AWS profile for source account")
   .requiredOption("--target-profile <profile>", "AWS profile for target account")
+  .option("-y, --yes", "Auto-confirm all prompts", false)
   .option("--verbose", "Enable detailed logging", false)
   .action((options) => {
-    setCliFlags({ publish: true, yes: false, verbose: options.verbose });
+    setCliFlags({ publish: true, yes: options.yes, verbose: options.verbose });
     copyViews(options);
   });
 
@@ -89,9 +90,10 @@ program
   .requiredOption("--target-config <path>", "Path to target configuration file")
   .requiredOption("--source-profile <profile>", "AWS profile for source account")
   .requiredOption("--target-profile <profile>", "AWS profile for target account")
+  .option("-y, --yes", "Auto-confirm all prompts", false)
   .option("--verbose", "Enable detailed logging", false)
   .action((options) => {
-    setCliFlags({ publish: true, yes: false, verbose: options.verbose });
+    setCliFlags({ publish: true, yes: options.yes, verbose: options.verbose });
     copyAgentStatuses(options);
   });
 
@@ -102,9 +104,10 @@ program
   .requiredOption("--target-config <path>", "Path to target configuration file")
   .requiredOption("--source-profile <profile>", "AWS profile for source account")
   .requiredOption("--target-profile <profile>", "AWS profile for target account")
+  .option("-y, --yes", "Auto-confirm all prompts", false)
   .option("--verbose", "Enable detailed logging", false)
   .action((options) => {
-    setCliFlags({ publish: true, yes: false, verbose: options.verbose });
+    setCliFlags({ publish: true, yes: options.yes, verbose: options.verbose });
     copyHoursOfOperations(options);
   });
 
@@ -117,9 +120,10 @@ program
   .requiredOption("--target-profile <profile>", "AWS profile for target account")
   .option("--force-hierarchy-recreate", "Allow deleting and recreating groups with parent mismatches", false)
   .option("--force-structure-update", "Allow overwriting target hierarchy structure if it differs from source", false)
+  .option("-y, --yes", "Auto-confirm all prompts", false)
   .option("--verbose", "Enable detailed logging", false)
   .action((options) => {
-    setCliFlags({ publish: true, yes: false, verbose: options.verbose });
+    setCliFlags({ publish: true, yes: options.yes, verbose: options.verbose });
     copyHierarchyGroups(options);
   });
 
@@ -130,9 +134,10 @@ program
   .requiredOption("--target-config <path>", "Path to target configuration file")
   .requiredOption("--source-profile <profile>", "AWS profile for source account")
   .requiredOption("--target-profile <profile>", "AWS profile for target account")
+  .option("-y, --yes", "Auto-confirm all prompts", false)
   .option("--verbose", "Enable detailed logging", false)
   .action((options) => {
-    setCliFlags({ publish: true, yes: false, verbose: options.verbose });
+    setCliFlags({ publish: true, yes: options.yes, verbose: options.verbose });
     copySecurityProfiles(options);
   });
 
@@ -144,9 +149,10 @@ program
   .requiredOption("--source-profile <profile>", "AWS profile for source account")
   .requiredOption("--target-profile <profile>", "AWS profile for target account")
   .option("--skip-outbound-flow", "Skip outbound whisper flow configuration", false)
+  .option("-y, --yes", "Auto-confirm all prompts", false)
   .option("--verbose", "Enable detailed logging", false)
   .action((options) => {
-    setCliFlags({ publish: true, yes: false, verbose: options.verbose });
+    setCliFlags({ publish: true, yes: options.yes, verbose: options.verbose });
     copyQueues(options);
   });
 
@@ -157,9 +163,10 @@ program
   .requiredOption("--target-config <path>", "Path to target configuration file")
   .requiredOption("--source-profile <profile>", "AWS profile for source account")
   .requiredOption("--target-profile <profile>", "AWS profile for target account")
+  .option("-y, --yes", "Auto-confirm all prompts", false)
   .option("--verbose", "Enable detailed logging", false)
   .action((options) => {
-    setCliFlags({ publish: true, yes: false, verbose: options.verbose });
+    setCliFlags({ publish: true, yes: options.yes, verbose: options.verbose });
     copyRoutingProfiles(options);
   });
 
@@ -170,9 +177,10 @@ program
   .requiredOption("--target-config <path>", "Path to target configuration file")
   .requiredOption("--source-profile <profile>", "AWS profile for source account")
   .requiredOption("--target-profile <profile>", "AWS profile for target account")
+  .option("-y, --yes", "Auto-confirm all prompts", false)
   .option("--verbose", "Enable detailed logging", false)
   .action((options) => {
-    setCliFlags({ publish: true, yes: false, verbose: options.verbose });
+    setCliFlags({ publish: true, yes: options.yes, verbose: options.verbose });
     copyQuickConnects(options);
   });
 
