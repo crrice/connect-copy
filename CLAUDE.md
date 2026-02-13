@@ -175,7 +175,7 @@ Note: Filters, ARN mappings, and phone number mappings only apply to source conf
 | Command | Extra Options | Notes |
 |---------|---------------|-------|
 | `copy` | `--skip`, `--no-publish`, `--yes`, resource-specific flags | Copies all resource types in dependency order |
-| `report` | `--resources-only` | Validate without copying |
+| `report` | `--resources-only`, `--skip`, resource-specific flags | Full change set report without copying |
 | `copy-hours-of-operation` | | |
 | `copy-agent-statuses` | | System statuses excluded |
 | `copy-hierarchy-groups` | `--force-hierarchy-recreate`, `--force-structure-update` | WARNING: severs historical data |

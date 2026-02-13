@@ -101,11 +101,15 @@ Each resource type can also be copied individually. All commands share the same 
 
 ### Report Command
 
-Validate without making changes:
+Preview the full change set without making changes:
 
 ```bash
-connect-copy report [options] [--resources-only]
+connect-copy report [options]
 ```
+
+By default, `report` runs content comparison for all 9 resource types and shows the same create/update/skip plans that `copy` would display. Use `--resources-only` to skip content comparison and only show which resources are missing from target. Use `--skip` to omit specific resource types (same values as `copy`).
+
+Accepts the same resource-specific flags as `copy`: `--skip-outbound-flow`, `--force-hierarchy-recreate`, `--force-structure-update`.
 
 ## Resource Matching
 
