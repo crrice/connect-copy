@@ -38,12 +38,16 @@ program
 
 program
   .command("report")
-  .description("Report resource differences between source and target instances")
+  .description("Report full change set between source and target instances")
   .requiredOption("--source-config <path>", "Path to source configuration file")
   .requiredOption("--target-config <path>", "Path to target configuration file")
   .requiredOption("--source-profile <profile>", "AWS profile for source account")
   .requiredOption("--target-profile <profile>", "AWS profile for target account")
-  .option("--resources-only", "Only report resource differences, skip flow validation", false)
+  .option("--resources-only", "Only report resource presence, skip content comparison", false)
+  .option("--skip <resources>", "Comma-separated resource types to skip (e.g. flows,queues)", "")
+  .option("--skip-outbound-flow", "Skip outbound whisper flow configuration for queues", false)
+  .option("--force-hierarchy-recreate", "Allow deleting and recreating hierarchy groups with parent mismatches", false)
+  .option("--force-structure-update", "Allow overwriting target hierarchy structure if it differs from source", false)
   .option("--verbose", "Enable detailed logging", false)
   .action((options) => {
     setCliFlags({ publish: true, yes: false, verbose: options.verbose });

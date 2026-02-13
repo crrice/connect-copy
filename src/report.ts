@@ -9,8 +9,17 @@ import { buildAllResourceMappings } from "./mapping.js";
 import { matchesFlowFilters, matchesFlowFiltersWithReason } from "./filters.js";
 import { validateFlowDependencies, validateSourceConfig, validateTargetConfig } from "./validation.js";
 import { replaceArnsInContent } from "./arn-replacement.js";
+import { compareHoursOfOperations, displayHoursOfOperationPlan } from "./resources/hours-of-operation/report.js";
+import { compareAgentStatuses, displayAgentStatusPlan } from "./resources/agent-statuses/report.js";
+import { compareHierarchyGroups, displayHierarchyGroupPlan } from "./resources/hierarchy-groups/report.js";
+import { compareSecurityProfiles, displaySecurityProfilePlan } from "./resources/security-profiles/report.js";
+import { compareQueues, displayQueuePlan } from "./resources/queues/report.js";
+import { compareRoutingProfiles, displayRoutingProfilePlan } from "./resources/routing-profiles/report.js";
+import { compareQuickConnects, displayQuickConnectPlan } from "./resources/quick-connects/report.js";
+import { compareViews, displayViewPlan } from "./resources/views/report.js";
 import type { SourceConfig, TargetConfig, ValidationResult } from "./validation.js";
 import type { InstanceInventory } from "./mapping.js";
+import type { ResourceComparisonConfig } from "./utils/cli-utils.js";
 
 
 export interface ReportOptions {
@@ -19,6 +28,10 @@ export interface ReportOptions {
   sourceProfile: string;
   targetProfile: string;
   resourcesOnly: boolean;
+  skip: string;
+  skipOutboundFlow: boolean;
+  forceHierarchyRecreate: boolean;
+  forceStructureUpdate: boolean;
 }
 
 
@@ -338,6 +351,12 @@ export async function compareAndValidateFlows(sourceClient: any, targetClient: a
 }
 
 
+const REPORT_RESOURCE_NAMES = [
+  "hours-of-operation", "agent-statuses", "hierarchy-groups", "security-profiles",
+  "queues", "routing-profiles", "quick-connects", "views", "flows"
+];
+
+
 export async function runReport(options: ReportOptions) {
   const { sourceClient, targetClient, sourceConfig, targetConfig, sourceInventory, targetInventory } = await setupInstanceComparison(
     options.sourceConfig,
@@ -348,9 +367,104 @@ export async function runReport(options: ReportOptions) {
 
   reportResourceDifferences(sourceInventory, targetInventory);
 
-  if (!options.resourcesOnly) {
+  if (options.resourcesOnly) return;
+
+  const skipSet = parseReportSkipList(options.skip);
+
+  const baseConfig: ResourceComparisonConfig = {
+    sourceClient,
+    targetClient,
+    sourceInstanceId: sourceConfig.instanceId,
+    targetInstanceId: targetConfig.instanceId,
+    filterConfig: undefined
+  };
+
+  if (!skipSet.has("hours-of-operation")) {
+    console.log(`\n${"=".repeat(60)}`);
+    console.log("  hours-of-operation");
+    console.log(`${"=".repeat(60)}`);
+    const result = await compareHoursOfOperations({ ...baseConfig, filterConfig: sourceConfig.hoursFilters });
+    displayHoursOfOperationPlan(result, cliFlags.verbose);
+  }
+
+  if (!skipSet.has("agent-statuses")) {
+    console.log(`\n${"=".repeat(60)}`);
+    console.log("  agent-statuses");
+    console.log(`${"=".repeat(60)}`);
+    const result = await compareAgentStatuses({ ...baseConfig, filterConfig: sourceConfig.agentStatusFilters });
+    displayAgentStatusPlan(result, cliFlags.verbose);
+  }
+
+  if (!skipSet.has("hierarchy-groups")) {
+    console.log(`\n${"=".repeat(60)}`);
+    console.log("  hierarchy-groups");
+    console.log(`${"=".repeat(60)}`);
+    const result = await compareHierarchyGroups({ ...baseConfig, filterConfig: sourceConfig.hierarchyGroupFilters }, options.forceHierarchyRecreate, options.forceStructureUpdate);
+    displayHierarchyGroupPlan(result, cliFlags.verbose);
+  }
+
+  if (!skipSet.has("security-profiles")) {
+    console.log(`\n${"=".repeat(60)}`);
+    console.log("  security-profiles");
+    console.log(`${"=".repeat(60)}`);
+    const result = await compareSecurityProfiles({ ...baseConfig, filterConfig: sourceConfig.securityProfileFilters });
+    displaySecurityProfilePlan(result, cliFlags.verbose);
+  }
+
+  if (!skipSet.has("queues")) {
+    console.log(`\n${"=".repeat(60)}`);
+    console.log("  queues");
+    console.log(`${"=".repeat(60)}`);
+    const result = await compareQueues(
+      { ...baseConfig, filterConfig: sourceConfig.queueFilters },
+      { skipOutboundFlow: options.skipOutboundFlow, phoneNumberMappings: sourceConfig.phoneNumberMappings }
+    );
+    displayQueuePlan(result, cliFlags.verbose, options.skipOutboundFlow);
+  }
+
+  if (!skipSet.has("routing-profiles")) {
+    console.log(`\n${"=".repeat(60)}`);
+    console.log("  routing-profiles");
+    console.log(`${"=".repeat(60)}`);
+    const result = await compareRoutingProfiles({ ...baseConfig, filterConfig: sourceConfig.routingProfileFilters });
+    displayRoutingProfilePlan(result, cliFlags.verbose);
+  }
+
+  if (!skipSet.has("quick-connects")) {
+    console.log(`\n${"=".repeat(60)}`);
+    console.log("  quick-connects");
+    console.log(`${"=".repeat(60)}`);
+    const result = await compareQuickConnects({ ...baseConfig, filterConfig: sourceConfig.quickConnectFilters });
+    displayQuickConnectPlan(result, cliFlags.verbose);
+  }
+
+  if (!skipSet.has("views")) {
+    console.log(`\n${"=".repeat(60)}`);
+    console.log("  views");
+    console.log(`${"=".repeat(60)}`);
+    const result = await compareViews({ ...baseConfig, filterConfig: sourceConfig.viewFilters });
+    displayViewPlan(result, cliFlags.verbose);
+  }
+
+  if (!skipSet.has("flows")) {
     await compareAndValidateFlows(sourceClient, targetClient, sourceConfig, targetConfig, sourceInventory, targetInventory);
   }
+}
+
+
+function parseReportSkipList(skip: string): Set<string> {
+  if (!skip) return new Set();
+
+  const names = skip.split(",").map(s => s.trim()).filter(s => s.length > 0);
+  const invalid = names.filter(n => !REPORT_RESOURCE_NAMES.includes(n));
+
+  if (invalid.length > 0) {
+    console.error(`Unknown resource types in --skip: ${invalid.join(", ")}`);
+    console.error(`Valid values: ${REPORT_RESOURCE_NAMES.join(", ")}`);
+    process.exit(1);
+  }
+
+  return new Set(names);
 }
 
 
