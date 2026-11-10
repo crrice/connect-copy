@@ -28,16 +28,14 @@ References: [Enable agent-initiated flows](https://docs.aws.amazon.com/connect/l
    - `FLOW` requires `CONTACT_FLOW`
    - `USER` requires `AGENT_TRANSFER`
    - `QUEUE` requires `QUEUE_TRANSFER`
-4. **Fix quick connect ARN classification.** `categorizeArn` in `src/arn-utils.ts` looks for `/quick-connect/`, but quick connect ARNs use `/transfer-destination/` (per the [IAM reference for Connect](https://docs.aws.amazon.com/service-authorization/latest/reference/list_connect.html)). With quick connects now copied after flows, a flow referencing a quick connect that is not yet in the target must fail validation with a clear error. Today it is classified as unknown, produces only a warning, and the copy proceeds with an unmapped source ARN. The same mismatch exists for other resource types; see the separate note on ARN classification.
+## Prerequisites
 
-## Prerequisite
-
-The AWS SDK upgrade (`@aws-sdk/client-connect` from 3.908.0), which adds the `FLOW` type.
+- The AWS SDK upgrade (`@aws-sdk/client-connect` from 3.908.0), which adds the `FLOW` type.
+- The ARN classification fix in `arn-classification.md`. With quick connects copied after flows, a flow referencing a quick connect that is not yet in the target must fail validation with a clear error. Today it is classified as unknown and only warns. That fix is tracked separately and covers quick connects along with four other resource types.
 
 ## Open questions for the implementing session
 
 These need a live instance.
 
 - Does the API accept a `FLOW` quick connect that points at a flow which is saved but not published? This decides how `FLOW` quick connects behave with `--no-publish`.
-- Confirm a real quick connect ARN contains `/transfer-destination/`.
 - Confirm no flow block in real flow content references a quick connect. If one does, a flow and a `FLOW` quick connect could reference each other, and the first copy would need a manual step.
