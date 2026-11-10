@@ -2,6 +2,8 @@
 
 Status: direction decided, not implemented. Several behaviours need a live instance before the design is final.
 
+**Needs a more in-depth look during implementation.** The fingerprint and rename behaviour in particular is expected to need refinement once there is more context on how the system behaves in practice. Treat the decisions below as the starting position, not a finished design.
+
 ## Platform change
 
 | | Versions | Aliases |
@@ -29,8 +31,8 @@ The goal is to get as close to one-to-one as possible while staying injective: t
 
 1. **Replicate aliases.** A target alias with the same name as a source alias must point at content matching the source's. Alias references are mapped source alias ID → alias name → target alias ID.
 2. **Match versions by fingerprint.** Version numbers cannot be matched across instances, so correspondence is by content. The fingerprint is the full content, including designer metadata and block positions, with every ARN replaced by the resource's type and name, in a canonical JSON form, hashed. Including positions keeps one definition of "same content": the existing flow comparison already treats a layout change as a difference, and designer metadata holds more than positions, so carving parts out risks treating different versions as equal.
-3. **Resolve names on every run.** Version content is immutable and can be cached; the fingerprint cannot, because it depends on current resource names. A rename applied on both sides leaves fingerprints matching.
-4. **Stamp created versions.** Each version the tool creates in the target records the source version number and fingerprint in its description. Correspondence for tool-made versions is then a lookup that does not depend on names. The stamp format must stay readable by later releases.
+3. **Resolve names on every run.** Version content is immutable and can be cached; the fingerprint cannot, because it depends on current resource names. Each side's fingerprint is computed from that side's own names, so fingerprints do not depend on copy order and can be computed in `report` mode before anything is copied.
+4. **Stamp created versions, for provenance only.** Each version the tool creates in the target records the source version number and fingerprint in its description, so the report can show where a target version came from. The stamp is not used to decide correspondence: the fingerprint is the only test. The stamp format must stay readable by later releases.
 5. **Three copy modes, one option.**
 
    | Mode | Copies |
@@ -45,6 +47,17 @@ The goal is to get as close to one-to-one as possible while staying injective: t
 9. **Correspondence report.** Show which source versions map to which target versions, and which have no counterpart, before or after a copy.
 10. **Flows and modules both**, with the same mechanism.
 
+## Renames
+
+There is no rename handling: no rename list in the config and no detection. A name is the identity, as elsewhere in the tool.
+
+- **Renamed on both sides by hand:** the names agree again, so fingerprints match on the next run.
+- **Renamed in the source only:** the tool sees a new resource, creates it, and leaves the old one in the target. Source versions that reference it now resolve to the new name while their target counterparts resolve to the old one, so they stop matching. In the default mode such a version is re-pushed only if latest or an alias points at it; the target then gets a new version referencing the new resource.
+
+The rule for maintainers: rename on both sides, or accept that a rename is treated as a new resource.
+
+Stamping target resources with a source ID to detect renames automatically was considered and ruled out. Tags are made to match the source exactly, and nothing goes into the target that does not come from the source.
+
 ## Known consequences
 
 - **Brief publication of old content.** Creating a missing version means publishing its content first. For a flow reached without a qualifier, callers get that content until the next step. With decision 6 this should be rare in the default mode: only when an alias points at a version the target has never had.
@@ -57,7 +70,6 @@ The goal is to get as close to one-to-one as possible while staying injective: t
 
 - Item 1 (FLOW quick connects) and the queue copy must handle qualified flow references.
 - Item 2: a tool module must have "at least one published version" to be usable, which may make a target version mandatory for tool modules.
-- Applying renames to the target before a copy is tracked as a separate item.
 
 ## Open questions for the implementing session
 
