@@ -33,6 +33,10 @@ References: [Enable agent-initiated flows](https://docs.aws.amazon.com/connect/l
 - The AWS SDK upgrade (`@aws-sdk/client-connect` from 3.908.0), which adds the `FLOW` type.
 - The ARN classification fix in `arn-classification.md`. With quick connects copied after flows, a flow referencing a quick connect that is not yet in the target must fail validation with a clear error. Today it is classified as unknown and only warns. That fix is tracked separately and covers quick connects along with four other resource types.
 
+## Related work
+
+Quick connects can reference a flow version or alias (`flow-id:VersionNumber` or `flow-id:AliasId`). The flow lookup here uses plain IDs, so a qualified reference would be reported as a missing flow. Handling it depends on item 3 (`03-versions-and-aliases.md`).
+
 ## Open questions for the implementing session
 
 These need a live instance.
